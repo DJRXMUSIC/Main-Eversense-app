@@ -1,9 +1,14 @@
 import { addGlucoseReadings, getAllGlucoseReadings } from './db';
 
 const API_PATH = '/api/glucose';
+const WIDGET_PATH = '/api/widget';
+
+function getApiKey() {
+  return import.meta.env.VITE_SYNC_API_KEY;
+}
 
 export async function syncGlucoseReadings() {
-  const apiKey = import.meta.env.VITE_SYNC_API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) {
     return { imported: 0, skipped: 0, error: 'No API key configured' };
   }
@@ -36,4 +41,38 @@ export async function syncGlucoseReadings() {
   // Import to IndexedDB (existing addGlucoseReadings handles dedup)
   const result = await addGlucoseReadings(readings);
   return { imported: result.added, skipped: result.skipped };
+}
+
+export async function pushWidgetData({ iob, glucoseData, todayBasal }) {
+  const apiKey = getApiKey();
+  if (!apiKey) return;
+
+  // Get last 3 hours of glucose for the widget sparkline
+  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const recentGlucose = glucoseData
+    .filter(r => r.timestamp >= threeHoursAgo)
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .map(r => ({ t: r.timestamp, v: r.value }));
+
+  const lastReading = recentGlucose.length > 0 ? recentGlucose[recentGlucose.length - 1] : null;
+
+  const payload = {
+    iob: Math.round(iob * 10) / 10,
+    lastGlucose: lastReading ? lastReading.v : null,
+    lastGlucoseTime: lastReading ? lastReading.t : null,
+    glucoseHistory: recentGlucose,
+    todayBasal: todayBasal ? todayBasal.units : null,
+  };
+
+  try {
+    const url = new URL(WIDGET_PATH, window.location.origin);
+    url.searchParams.set('key', apiKey);
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error('Widget push failed:', err);
+  }
 }

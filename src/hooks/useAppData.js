@@ -15,7 +15,7 @@ import {
   clearAllData,
 } from '../lib/db';
 import { calcTotalIOB } from '../lib/iob';
-import { syncGlucoseReadings } from '../lib/sync';
+import { syncGlucoseReadings, pushWidgetData } from '../lib/sync';
 
 export function useAppData() {
   const [glucoseData, setGlucoseData] = useState([]);
@@ -60,6 +60,10 @@ export function useAppData() {
       setCurrentIOB(iob);
 
       setLoading(false);
+
+      // Push widget snapshot to backend (fire and forget)
+      const todayB2 = await getBasalDoseForDate(today);
+      pushWidgetData({ iob, glucoseData: glucose, todayBasal: todayB2 });
     } catch (err) {
       console.error('Failed to load data:', err);
       setLoading(false);
