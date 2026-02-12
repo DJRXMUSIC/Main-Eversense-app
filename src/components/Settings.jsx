@@ -136,9 +136,29 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
           </div>
         </div>
 
-        <div className="text-center text-xs text-text-secondary pb-8 space-y-1">
+        <div className="text-center text-xs text-text-secondary pb-8 space-y-2">
           <div>Supercharged v1.0</div>
           <div>Build: {new Date(__BUILD_TIME__).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</div>
+          <button
+            onClick={async () => {
+              if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const reg of registrations) {
+                  await reg.unregister();
+                }
+              }
+              if ('caches' in window) {
+                const names = await caches.keys();
+                for (const name of names) {
+                  await caches.delete(name);
+                }
+              }
+              window.location.reload();
+            }}
+            className="mt-1 px-4 py-2 rounded-lg bg-bg-tertiary text-text-secondary active:opacity-80"
+          >
+            Force Refresh
+          </button>
         </div>
       </div>
     </div>
