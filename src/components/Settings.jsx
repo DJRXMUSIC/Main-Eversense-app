@@ -136,8 +136,9 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
           </div>
         </div>
 
-        <div className="text-center text-xs text-text-secondary pb-8">
-          Supercharged v1.0 — Data stored locally on device
+        <div className="text-center text-xs text-text-secondary pb-8 space-y-1">
+          <div>Supercharged v1.0</div>
+          <div>Build: {new Date(__BUILD_TIME__).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}</div>
         </div>
       </div>
     </div>
