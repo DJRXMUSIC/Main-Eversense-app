@@ -9,12 +9,12 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
   };
 
   return (
-    <div className="px-4 pt-4 pb-2">
+    <div className="px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-lg font-bold tracking-tight">Supercharged</h1>
         <button
           onClick={onOpenSettings}
-          className="p-2 rounded-lg bg-bg-secondary text-text-secondary hover:text-text-primary"
+          className="p-3 rounded-lg bg-bg-secondary text-text-secondary hover:text-text-primary"
           aria-label="Settings"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
