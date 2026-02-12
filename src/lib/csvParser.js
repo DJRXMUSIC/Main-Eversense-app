@@ -1,7 +1,33 @@
 import { v4 as uuidv4 } from 'uuid';
 
-const TIMESTAMP_COLUMNS = ['date', 'timestamp', 'start', 'startdate', 'start date'];
-const GLUCOSE_COLUMNS = ['value', 'qty', 'quantity', 'blood glucose', 'glucose', 'blood glucose (mg/dl)'];
+/**
+ * Parse a CSV file from Health Auto Export and extract glucose readings.
+ * Uses fuzzy/substring matching to handle the wide variety of column names
+ * that Health Auto Export and Apple Health exports can produce.
+ */
+
+// Patterns to match timestamp columns (checked via substring/includes)
+const TIMESTAMP_PATTERNS = ['date', 'timestamp', 'start', 'time'];
+// Patterns to match glucose value columns
+const GLUCOSE_PATTERNS = ['glucose', 'value', 'qty', 'quantity', 'bg'];
+
+/**
+ * Find a column index by fuzzy matching against patterns.
+ * Tries exact match first, then substring match.
+ */
+function findColumnIndex(headers, patterns) {
+  // First pass: exact match
+  for (const pattern of patterns) {
+    const idx = headers.findIndex(h => h === pattern);
+    if (idx !== -1) return idx;
+  }
+  // Second pass: header contains pattern
+  for (const pattern of patterns) {
+    const idx = headers.findIndex(h => h.includes(pattern));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
 
 export function parseGlucoseCSV(csvText) {
   const lines = csvText.split(/\r?\n/).filter(line => line.trim());
@@ -9,15 +35,21 @@ export function parseGlucoseCSV(csvText) {
     return { readings: [], errors: 0 };
   }
 
-  const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
-  const timestampIdx = headers.findIndex(h => TIMESTAMP_COLUMNS.includes(h));
-  const glucoseIdx = headers.findIndex(h => GLUCOSE_COLUMNS.includes(h));
+  const rawHeaders = parseCSVLine(lines[0]);
+  const headers = rawHeaders.map(h => h.trim().toLowerCase().replace(/[()]/g, ''));
+  const timestampIdx = findColumnIndex(headers, TIMESTAMP_PATTERNS);
+  const glucoseIdx = findColumnIndex(headers, GLUCOSE_PATTERNS);
 
   if (timestampIdx === -1 || glucoseIdx === -1) {
+    // Show a concise error with just the first few column names
+    const preview = rawHeaders.slice(0, 6).map(h => h.trim()).join(', ');
+    const extra = rawHeaders.length > 6 ? ` (+${rawHeaders.length - 6} more)` : '';
+    const missing = [];
+    if (timestampIdx === -1) missing.push('timestamp/date');
+    if (glucoseIdx === -1) missing.push('glucose/value');
     throw new Error(
-      `Could not find required columns. Found: [${headers.join(', ')}]. ` +
-      `Need a timestamp column (${TIMESTAMP_COLUMNS.join('/')}) and ` +
-      `a glucose column (${GLUCOSE_COLUMNS.join('/')}).`
+      `Could not find ${missing.join(' or ')} column. ` +
+      `Columns found: ${preview}${extra}`
     );
   }
 
@@ -34,6 +66,12 @@ export function parseGlucoseCSV(csvText) {
 
       const rawTimestamp = fields[timestampIdx].trim();
       const rawValue = fields[glucoseIdx].trim();
+
+      if (!rawTimestamp || !rawValue) {
+        errors++;
+        continue;
+      }
+
       const timestamp = parseTimestamp(rawTimestamp);
       const value = parseFloat(rawValue);
 
@@ -83,18 +121,29 @@ function parseCSVLine(line) {
 }
 
 function parseTimestamp(str) {
+  // Try ISO 8601 first
   let date = new Date(str);
   if (!isNaN(date.getTime())) return date;
 
-  const usMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?$/i);
+  // Try US format: MM/DD/YYYY HH:MM:SS AM/PM
+  const usMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?$/i);
   if (usMatch) {
     let [, month, day, year, hours, minutes, seconds, ampm] = usMatch;
+    if (year.length === 2) year = '20' + year;
     hours = parseInt(hours);
     if (ampm) {
       if (ampm.toUpperCase() === 'PM' && hours !== 12) hours += 12;
       if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
     }
-    date = new Date(year, month - 1, day, hours, parseInt(minutes), parseInt(seconds || 0));
+    date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hours, parseInt(minutes), parseInt(seconds || 0));
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  // Try: YYYY-MM-DD HH:MM (no T separator)
+  const isoishMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (isoishMatch) {
+    const [, y, m, d, h, min, sec] = isoishMatch;
+    date = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), parseInt(h), parseInt(min), parseInt(sec || 0));
     if (!isNaN(date.getTime())) return date;
   }
 

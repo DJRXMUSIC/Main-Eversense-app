@@ -109,7 +109,9 @@ export default function ImportModal({ onClose, onImport }) {
           <div>
             <div className="bg-danger/20 rounded-xl p-4 mb-4">
               <div className="text-danger font-bold mb-1">Import Failed</div>
-              <div className="text-sm text-text-secondary">{error}</div>
+              <div className="text-sm text-text-secondary max-h-32 overflow-y-auto break-words">
+                {error && error.length > 200 ? error.slice(0, 200) + '...' : error}
+              </div>
             </div>
             <button
               onClick={() => { setStatus('idle'); setError(null); }}
