@@ -24,6 +24,8 @@ function App() {
     updateSetting,
     doExport,
     doClearAll,
+    syncing,
+    doSync,
     refreshData,
   } = useAppData();
 
@@ -77,6 +79,8 @@ function App() {
         todayBasal={todayBasal}
         glucoseData={glucoseData}
         onOpenSettings={() => setShowSettings(true)}
+        syncing={syncing}
+        onSync={doSync}
       />
 
       <GlucoseChart

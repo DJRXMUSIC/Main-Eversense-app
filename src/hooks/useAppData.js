@@ -15,6 +15,7 @@ import {
   clearAllData,
 } from '../lib/db';
 import { calcTotalIOB } from '../lib/iob';
+import { syncGlucoseReadings } from '../lib/sync';
 
 export function useAppData() {
   const [glucoseData, setGlucoseData] = useState([]);
@@ -24,7 +25,10 @@ export function useAppData() {
   const [currentIOB, setCurrentIOB] = useState(0);
   const [settings, setSettingsState] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncResult, setLastSyncResult] = useState(null);
   const iobInterval = useRef(null);
+  const hasSynced = useRef(false);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -62,10 +66,35 @@ export function useAppData() {
     }
   }, [today]);
 
+  // Auto-sync glucose readings from backend on launch
+  const doSync = useCallback(async () => {
+    try {
+      setSyncing(true);
+      const result = await syncGlucoseReadings();
+      setLastSyncResult({ time: new Date(), ...result });
+      if (result.imported > 0) {
+        await loadData();
+      }
+    } catch (err) {
+      console.error('Auto-sync failed:', err);
+      setLastSyncResult({ time: new Date(), error: err.message });
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadData]);
+
   // Initial load and cleanup
   useEffect(() => {
     cleanupOldData().then(loadData);
   }, [loadData]);
+
+  // Auto-sync once after initial load completes
+  useEffect(() => {
+    if (!loading && !hasSynced.current) {
+      hasSynced.current = true;
+      doSync();
+    }
+  }, [loading, doSync]);
 
   // Update IOB every minute
   useEffect(() => {
@@ -146,6 +175,8 @@ export function useAppData() {
     currentIOB,
     settings,
     loading,
+    syncing,
+    lastSyncResult,
     logBolus,
     logBasal,
     importGlucose,
@@ -153,6 +184,7 @@ export function useAppData() {
     updateSetting,
     doExport,
     doClearAll,
+    doSync,
     refreshData: loadData,
   };
 }
