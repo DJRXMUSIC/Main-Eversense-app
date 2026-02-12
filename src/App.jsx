@@ -6,6 +6,7 @@ import BolusModal from './components/BolusModal';
 import BasalModal from './components/BasalModal';
 import ImportModal from './components/ImportModal';
 import History from './components/History';
+import Stats from './components/Stats';
 import Settings from './components/Settings';
 import { getAllGlucoseReadings, getAllBolusDoses, getAllBasalDoses } from './lib/db';
 
@@ -112,6 +113,8 @@ function App() {
           </button>
         </div>
       </div>
+
+      <Stats bolusDoses={bolusDoses} basalDoses={basalDoses} />
 
       <History bolusDoses={bolusDoses} basalDoses={basalDoses} glucoseData={glucoseData} />
 

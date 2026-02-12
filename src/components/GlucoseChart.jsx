@@ -23,15 +23,19 @@ const ACCENT_90 = 'rgba(0, 132, 61, 0.9)';
 const GLUCOSE_COLOR = '#3b82f6';
 const HOUR_MS = 60 * 60 * 1000;
 
+// Live view: 5 hours back, 1 hour forward (accounts for Eversense ~3hr delay)
+const PAST_HOURS = 5;
+const FUTURE_HOURS = 1;
+
 export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
   const now = useMemo(() => Date.now(), []);
 
-  // Scrollable: offset in hours from "now centered". 0 = now, -6 = 6 hours back, etc.
+  // Scrollable: offset in hours. 0 = live view, negative = earlier
   const [offsetHours, setOffsetHours] = useState(0);
 
-  const centerTime = now + offsetHours * HOUR_MS;
-  const windowStart = centerTime - 3 * HOUR_MS;
-  const windowEnd = centerTime + 3 * HOUR_MS;
+  // Window: 6 hours total, weighted toward past for live view
+  const windowEnd = now + (FUTURE_HOURS + offsetHours) * HOUR_MS;
+  const windowStart = now + (offsetHours - PAST_HOURS) * HOUR_MS;
 
   const { dia, peak, targetLow, targetHigh, displayLow, displayHigh } = useMemo(() => ({
     dia: settings?.bolusDIA || 300,
@@ -323,13 +327,17 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     },
   }), [activeDoses, windowStart, windowEnd]);
 
-  // Navigation: scroll back/forward in 3-hour increments, max 3 days back
-  const canGoBack = offsetHours > -72 + 3; // 3 days = 72 hours
+  // Data count for the current window
+  const pointCount = glucosePoints.length;
+
+  // Navigation: scroll in 3-hour increments, max 3 days back
+  const maxBackHours = 72;
+  const canGoBack = offsetHours > -(maxBackHours - PAST_HOURS);
   const canGoForward = offsetHours < 0;
   const isAtNow = offsetHours === 0;
 
   const goBack = useCallback(() => {
-    setOffsetHours(prev => Math.max(-69, prev - 3));
+    setOffsetHours(prev => Math.max(-(maxBackHours - PAST_HOURS), prev - 3));
   }, []);
   const goForward = useCallback(() => {
     setOffsetHours(prev => Math.min(0, prev + 3));
@@ -359,7 +367,12 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
         >
           &#9664; Earlier
         </button>
-        <div className="text-xs text-text-secondary text-center flex-1 px-2">{rangeLabel}</div>
+        <div className="text-center flex-1 px-2">
+          <div className="text-xs text-text-secondary">{rangeLabel}</div>
+          {pointCount > 0 && (
+            <div className="text-[10px] text-text-secondary opacity-60">{pointCount} readings</div>
+          )}
+        </div>
         {isAtNow ? (
           <div className="px-3 py-1 rounded-lg text-sm font-medium text-accent">Live</div>
         ) : (
