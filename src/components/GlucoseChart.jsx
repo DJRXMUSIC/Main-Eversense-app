@@ -30,7 +30,7 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     displayHigh: settings?.graphDisplayHigh || 350,
   }), [settings]);
 
-  // Filter bolus doses active in our window (injected within DIA minutes before windowEnd)
+  // Filter bolus doses active in our window
   const activeDoses = useMemo(() => {
     const diaMs = dia * 60 * 1000;
     return bolusDoses.filter(d => {
@@ -39,14 +39,15 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     });
   }, [bolusDoses, windowStart, windowEnd, dia]);
 
-  // Glucose line data
+  // Glucose line data — filter to chart window, sort by time
   const glucosePoints = useMemo(() => {
     return glucoseData
       .filter(r => {
         const t = new Date(r.timestamp).getTime();
         return t >= windowStart.getTime() && t <= windowEnd.getTime();
       })
-      .map(r => ({ x: new Date(r.timestamp), y: r.value }));
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .map(r => ({ x: new Date(r.timestamp).getTime(), y: r.value }));
   }, [glucoseData, windowStart, windowEnd]);
 
   // Individual dose IOB curves
@@ -55,7 +56,7 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
       const points = getDoseIOBCurve(dose, windowStart, windowEnd, 5, dia, peak);
       return {
         dose,
-        points: points.map(p => ({ x: p.time, y: p.iob })),
+        points: points.map(p => ({ x: p.time.getTime(), y: p.iob })),
       };
     });
   }, [activeDoses, windowStart, windowEnd, dia, peak]);
@@ -64,7 +65,7 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
   const aggregatedIOB = useMemo(() => {
     if (activeDoses.length === 0) return [];
     const points = getAggregatedIOBCurve(activeDoses, windowStart, windowEnd, 5, dia, peak);
-    return points.map(p => ({ x: p.time, y: p.iob }));
+    return points.map(p => ({ x: p.time.getTime(), y: p.iob }));
   }, [activeDoses, windowStart, windowEnd, dia, peak]);
 
   // Max IOB for y-axis scaling
@@ -73,14 +74,14 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     return Math.max(10, Math.ceil(max + 1));
   }, [aggregatedIOB]);
 
-  // Dose annotation points (markers)
+  // Dose marker points
   const doseMarkers = useMemo(() => {
     return activeDoses
       .filter(d => {
         const t = new Date(d.timestamp).getTime();
         return t >= windowStart.getTime() && t <= windowEnd.getTime();
       })
-      .map(d => ({ x: new Date(d.timestamp), y: d.units }));
+      .map(d => ({ x: new Date(d.timestamp).getTime(), y: d.units }));
   }, [activeDoses, windowStart, windowEnd]);
 
   const formatDoseLabel = (dose) => {
@@ -93,46 +94,23 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
   const datasets = useMemo(() => {
     const ds = [];
 
-    // Target range band (upper boundary)
-    ds.push({
-      label: 'Target High',
-      data: [{ x: windowStart, y: targetHigh }, { x: windowEnd, y: targetHigh }],
-      borderColor: 'transparent',
-      backgroundColor: 'rgba(34, 197, 94, 0.15)',
-      fill: '+1',
-      pointRadius: 0,
-      yAxisID: 'yGlucose',
-      order: 10,
-    });
-
-    // Target range band (lower boundary)
-    ds.push({
-      label: 'Target Low',
-      data: [{ x: windowStart, y: targetLow }, { x: windowEnd, y: targetLow }],
-      borderColor: 'transparent',
-      backgroundColor: 'transparent',
-      fill: false,
-      pointRadius: 0,
-      yAxisID: 'yGlucose',
-      order: 10,
-    });
-
-    // Glucose line
+    // Glucose line — primary dataset
     ds.push({
       label: 'Glucose',
       data: glucosePoints,
       borderColor: '#3b82f6',
       backgroundColor: 'transparent',
       borderWidth: 2.5,
-      pointRadius: 1.5,
+      pointRadius: glucosePoints.length > 100 ? 0 : 1.5,
       pointBackgroundColor: '#3b82f6',
       tension: 0.3,
       yAxisID: 'yGlucose',
-      order: 3,
+      order: 2,
+      spanGaps: false,
     });
 
     // Individual dose decay curves (dashed, faded)
-    doseCurves.forEach((curve, i) => {
+    doseCurves.forEach((curve) => {
       ds.push({
         label: formatDoseLabel(curve.dose),
         data: curve.points,
@@ -159,7 +137,7 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
         tension: 0.3,
         fill: true,
         yAxisID: 'yInsulin',
-        order: 2,
+        order: 3,
       });
     }
 
@@ -180,7 +158,7 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     }
 
     return ds;
-  }, [glucosePoints, doseCurves, aggregatedIOB, doseMarkers, windowStart, windowEnd, targetLow, targetHigh]);
+  }, [glucosePoints, doseCurves, aggregatedIOB, doseMarkers]);
 
   const options = useMemo(() => ({
     responsive: true,
@@ -213,18 +191,14 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
             if (label.includes('@')) return `${label}: ${item.parsed.y.toFixed(1)}u remaining`;
             return '';
           },
-          filter: (item) => {
-            const label = item.dataset.label || '';
-            return label !== 'Target High' && label !== 'Target Low';
-          },
         },
       },
     },
     scales: {
       x: {
         type: 'time',
-        min: windowStart,
-        max: windowEnd,
+        min: windowStart.getTime(),
+        max: windowEnd.getTime(),
         time: {
           unit: 'hour',
           displayFormats: { hour: 'h:mm a' },
@@ -244,7 +218,6 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
           stepSize: 50,
           callback: (v) => `${v}`,
         },
-        title: { display: false },
       },
       yInsulin: {
         type: 'linear',
@@ -257,16 +230,32 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
           font: { size: 11 },
           callback: (v) => `${v}u`,
         },
-        title: { display: false },
       },
     },
   }), [windowStart, windowEnd, displayLow, displayHigh, maxIOB]);
 
-  // "Now" line annotation via plugin
+  // Target range band plugin — draws directly on canvas, no dataset conflicts
+  const targetRangePlugin = useMemo(() => ({
+    id: 'targetRange',
+    beforeDraw: (chart) => {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+      const yScale = scales.yGlucose;
+      const top = yScale.getPixelForValue(targetHigh);
+      const bottom = yScale.getPixelForValue(targetLow);
+      ctx.save();
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.12)';
+      ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, bottom - top);
+      ctx.restore();
+    },
+  }), [targetLow, targetHigh]);
+
+  // "Now" line plugin
   const nowLinePlugin = useMemo(() => ({
     id: 'nowLine',
     afterDraw: (chart) => {
-      const { ctx, scales } = chart;
+      const { ctx, scales, chartArea } = chart;
+      if (!chartArea) return;
       const xScale = scales.x;
       const x = xScale.getPixelForValue(now.getTime());
       if (x < xScale.left || x > xScale.right) return;
@@ -276,17 +265,16 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
       ctx.setLineDash([4, 4]);
       ctx.strokeStyle = 'rgba(255,255,255,0.3)';
       ctx.lineWidth = 1;
-      ctx.moveTo(x, chart.chartArea.top);
-      ctx.lineTo(x, chart.chartArea.bottom);
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
       ctx.stroke();
       ctx.restore();
 
-      // "Now" label
       ctx.save();
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.font = '10px -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Now', x, chart.chartArea.top - 4);
+      ctx.fillText('Now', x, chartArea.top - 4);
       ctx.restore();
     },
   }), [now]);
@@ -295,7 +283,8 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
   const doseLabelsPlugin = useMemo(() => ({
     id: 'doseLabels',
     afterDraw: (chart) => {
-      const { ctx, scales } = chart;
+      const { ctx, scales, chartArea } = chart;
+      if (!chartArea) return;
       const xScale = scales.x;
       const yScale = scales.yInsulin;
 
@@ -310,7 +299,6 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
         ctx.fillStyle = 'rgba(249, 115, 22, 0.9)';
         ctx.font = 'bold 11px -apple-system, sans-serif';
         ctx.textAlign = 'center';
-        // Offset labels vertically to avoid overlap
         const offset = (i % 2 === 0) ? -14 : -26;
         ctx.fillText(`${dose.units}u`, x, y + offset);
         ctx.restore();
@@ -323,7 +311,7 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
       <Line
         data={{ datasets }}
         options={options}
-        plugins={[nowLinePlugin, doseLabelsPlugin]}
+        plugins={[targetRangePlugin, nowLinePlugin, doseLabelsPlugin]}
       />
     </div>
   );
