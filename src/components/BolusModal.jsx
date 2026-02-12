@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 export default function BolusModal({ onClose, onSave }) {
-  const [units, setUnits] = useState('');
+  const [units, setUnits] = useState('2');
   const [useCustomTime, setUseCustomTime] = useState(false);
   const [customTime, setCustomTime] = useState(() => {
     const now = new Date();
@@ -64,7 +64,7 @@ export default function BolusModal({ onClose, onSave }) {
               value={units}
               onChange={(e) => setUnits(e.target.value.replace(/\D/g, ''))}
               placeholder="0"
-              className="w-24 h-16 text-center text-4xl font-bold bg-bg-primary rounded-xl border border-bg-tertiary focus:border-insulin outline-none"
+              className="w-24 h-16 text-center text-4xl font-bold bg-bg-primary rounded-xl border border-bg-tertiary focus:border-accent outline-none"
             />
             <button
               onClick={() => adjustUnits(1)}
@@ -90,13 +90,13 @@ export default function BolusModal({ onClose, onSave }) {
           <div className="flex gap-2 mb-2">
             <button
               onClick={() => setUseCustomTime(false)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium ${!useCustomTime ? 'bg-insulin text-white' : 'bg-bg-tertiary text-text-secondary'}`}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium ${!useCustomTime ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-secondary'}`}
             >
               Now
             </button>
             <button
               onClick={() => setUseCustomTime(true)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium ${useCustomTime ? 'bg-insulin text-white' : 'bg-bg-tertiary text-text-secondary'}`}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium ${useCustomTime ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-secondary'}`}
             >
               Custom Time
             </button>
@@ -115,7 +115,7 @@ export default function BolusModal({ onClose, onSave }) {
         <button
           onClick={handleSave}
           disabled={unitsNum <= 0}
-          className="w-full py-4 rounded-xl font-bold text-lg bg-insulin text-white disabled:opacity-40 active:opacity-80"
+          className="w-full py-4 rounded-xl font-bold text-lg bg-accent text-white disabled:opacity-40 active:opacity-80"
         >
           Log {unitsNum > 0 ? `${unitsNum}u Bolus` : 'Bolus'}
         </button>

@@ -7,8 +7,9 @@
   --color-text-primary: #ffffff;
   --color-text-secondary: #a3a3a3;
   --color-glucose: #3b82f6;
-  --color-insulin: #f97316;
-  --color-target: #22c55e;
+  --color-insulin: #00843D;
+  --color-target: #00843D;
+  --color-accent: #00843D;
   --color-danger: #ef4444;
 }
 

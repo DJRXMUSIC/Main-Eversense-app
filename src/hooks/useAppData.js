@@ -33,9 +33,9 @@ export function useAppData() {
       const s = await getSettings();
       setSettingsState(s);
 
-      // Load glucose for graph window (past 24 hours — chart will filter to its 6hr window)
+      // Load glucose for scrollable graph (past 3 days — chart navigates within this)
       const now = new Date();
-      const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const windowStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
       const glucose = await getGlucoseReadings(windowStart.toISOString(), now.toISOString());
       setGlucoseData(glucose);
 

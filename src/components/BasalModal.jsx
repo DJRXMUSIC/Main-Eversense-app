@@ -69,7 +69,7 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
               <button
                 key={d}
                 onClick={() => setDate(d)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium ${d === date ? 'bg-insulin text-white' : 'bg-bg-tertiary text-text-secondary'}`}
+                className={`px-3 py-2 rounded-lg text-sm font-medium ${d === date ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-secondary'}`}
               >
                 {formatDateLabel(d)}
               </button>
@@ -100,7 +100,7 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
               value={units}
               onChange={(e) => setUnits(e.target.value)}
               placeholder="0"
-              className="w-24 h-16 text-center text-4xl font-bold bg-bg-primary rounded-xl border border-bg-tertiary focus:border-insulin outline-none"
+              className="w-24 h-16 text-center text-4xl font-bold bg-bg-primary rounded-xl border border-bg-tertiary focus:border-accent outline-none"
             />
             <button
               onClick={() => adjustUnits(0.5)}
@@ -120,7 +120,7 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
         <button
           onClick={handleSave}
           disabled={unitsNum <= 0}
-          className="w-full py-4 rounded-xl font-bold text-lg bg-insulin text-white disabled:opacity-40 active:opacity-80"
+          className="w-full py-4 rounded-xl font-bold text-lg bg-accent text-white disabled:opacity-40 active:opacity-80"
         >
           {isEditing ? 'Update' : 'Log'} {unitsNum > 0 ? `${unitsNum}u Toujeo` : 'Basal'}
         </button>
