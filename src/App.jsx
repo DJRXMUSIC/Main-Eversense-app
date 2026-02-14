@@ -25,6 +25,10 @@ function App() {
     updateSetting,
     doExport,
     doClearAll,
+    removeBolus,
+    editBolus,
+    removeBasal,
+    editBasal,
     syncing,
     doSync,
     refreshData,
@@ -114,9 +118,16 @@ function App() {
         </div>
       </div>
 
-      <Stats bolusDoses={bolusDoses} basalDoses={basalDoses} />
+      <History
+        bolusDoses={bolusDoses}
+        basalDoses={basalDoses}
+        onEditBolus={editBolus}
+        onDeleteBolus={removeBolus}
+        onEditBasal={editBasal}
+        onDeleteBasal={removeBasal}
+      />
 
-      <History bolusDoses={bolusDoses} basalDoses={basalDoses} glucoseData={glucoseData} />
+      <Stats bolusDoses={bolusDoses} basalDoses={basalDoses} />
 
       {/* Modals */}
       {showBolus && (

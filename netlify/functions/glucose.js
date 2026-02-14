@@ -31,6 +31,17 @@ async function saveReadings(store, readings) {
   return filtered;
 }
 
+// Normalize timestamp: round to nearest minute to avoid sub-second dedup issues
+function normalizeTimestamp(dateStr) {
+  try {
+    const d = new Date(dateStr);
+    d.setSeconds(0, 0);
+    return d.toISOString();
+  } catch {
+    return dateStr;
+  }
+}
+
 // POST: Receive glucose data from Health Auto Export
 async function handlePost(event) {
   let body;
@@ -43,46 +54,68 @@ async function handlePost(event) {
     });
   }
 
-  // Handle both wrapper formats from Health Auto Export
-  const metrics = body?.data?.metrics || body?.metrics;
+  // Handle multiple wrapper formats from Health Auto Export
+  let metrics = body?.data?.metrics || body?.metrics;
+
+  // Some versions send data as a flat array
+  if (!metrics && body?.data && Array.isArray(body.data)) {
+    metrics = body.data;
+  }
+
   if (!metrics || !Array.isArray(metrics)) {
     return new Response(
-      JSON.stringify({ error: "No metrics found in payload" }),
+      JSON.stringify({
+        error: "No metrics found in payload",
+        receivedKeys: Object.keys(body || {}),
+        hasData: !!body?.data,
+        dataType: typeof body?.data,
+      }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  // Find blood_glucose metric
+  // Find blood_glucose metric — try multiple name variations
   const glucoseMetric = metrics.find(
-    (m) => m.name === "blood_glucose" || m.name === "Blood Glucose"
+    (m) =>
+      m.name === "blood_glucose" ||
+      m.name === "Blood Glucose" ||
+      m.name === "blood_glucose_level" ||
+      m.name === "BloodGlucose" ||
+      (m.name && m.name.toLowerCase().includes("glucose"))
   );
+
   if (!glucoseMetric || !Array.isArray(glucoseMetric.data)) {
     return new Response(
-      JSON.stringify({ error: "No blood_glucose metric found" }),
+      JSON.stringify({
+        error: "No blood_glucose metric found",
+        availableMetrics: metrics.map((m) => m.name),
+      }),
       { status: 400, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  // Transform to internal format
-  const newReadings = glucoseMetric.data.map((r) => ({
-    id: generateId(),
-    timestamp: new Date(r.date).toISOString(),
-    value: Math.round(r.qty),
-    source: "auto-sync",
-  }));
+  // Transform to internal format, normalize timestamps
+  const newReadings = glucoseMetric.data
+    .filter((r) => r.date && r.qty != null && !isNaN(r.qty))
+    .map((r) => ({
+      id: generateId(),
+      timestamp: normalizeTimestamp(r.date),
+      value: Math.round(r.qty),
+      source: "auto-sync",
+    }));
 
   const store = getStore(STORE_NAME);
   const existing = await getReadings(store);
 
-  // Deduplicate by timestamp + value
+  // Deduplicate by normalized timestamp (one reading per minute)
   const existingKeys = new Set(
-    existing.map((r) => `${r.timestamp}_${r.value}`)
+    existing.map((r) => normalizeTimestamp(r.timestamp))
   );
   let imported = 0;
   let duplicates = 0;
 
   for (const reading of newReadings) {
-    const key = `${reading.timestamp}_${reading.value}`;
+    const key = normalizeTimestamp(reading.timestamp);
     if (existingKeys.has(key)) {
       duplicates++;
     } else {
@@ -102,6 +135,7 @@ async function handlePost(event) {
       imported,
       duplicates,
       total: saved.length,
+      receivedCount: glucoseMetric.data.length,
     }),
     { status: 200, headers: { "Content-Type": "application/json" } }
   );
@@ -116,7 +150,11 @@ async function handleGet(event) {
   let readings = await getReadings(store);
 
   if (since) {
-    readings = readings.filter((r) => r.timestamp > since);
+    // 5-minute overlap to catch out-of-order delivery or timestamp rounding
+    const sinceOverlap = new Date(
+      new Date(since).getTime() - 5 * 60 * 1000
+    ).toISOString();
+    readings = readings.filter((r) => r.timestamp >= sinceOverlap);
   }
 
   return new Response(

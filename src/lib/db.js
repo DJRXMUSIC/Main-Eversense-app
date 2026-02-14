@@ -39,13 +39,23 @@ export async function addGlucoseReadings(readings) {
   const tx = db.transaction('glucoseReadings', 'readwrite');
   const store = tx.objectStore('glucoseReadings');
   const existing = await store.getAll();
-  const existingKeys = new Set(existing.map(r => `${r.timestamp}_${r.value}`));
+
+  // Normalize to nearest minute for dedup (matches server-side logic)
+  const normalizeTs = (ts) => {
+    try {
+      const d = new Date(ts);
+      d.setSeconds(0, 0);
+      return d.toISOString();
+    } catch { return ts; }
+  };
+
+  const existingKeys = new Set(existing.map(r => normalizeTs(r.timestamp)));
 
   let added = 0;
   let skipped = 0;
 
   for (const reading of readings) {
-    const key = `${reading.timestamp}_${reading.value}`;
+    const key = normalizeTs(reading.timestamp);
     if (existingKeys.has(key)) {
       skipped++;
     } else {
@@ -92,6 +102,14 @@ export async function getAllBolusDoses() {
   return db.getAll('bolusDoses');
 }
 
+export async function updateBolusDose(id, updates) {
+  const db = await getDB();
+  const dose = await db.get('bolusDoses', id);
+  if (!dose) return;
+  Object.assign(dose, updates);
+  await db.put('bolusDoses', dose);
+}
+
 export async function deleteBolusDose(id) {
   const db = await getDB();
   await db.delete('bolusDoses', id);
@@ -123,6 +141,19 @@ export async function getBasalDoses(days = 7) {
 export async function getAllBasalDoses() {
   const db = await getDB();
   return db.getAll('basalDoses');
+}
+
+export async function deleteBasalDose(id) {
+  const db = await getDB();
+  await db.delete('basalDoses', id);
+}
+
+export async function updateBasalDose(id, updates) {
+  const db = await getDB();
+  const dose = await db.get('basalDoses', id);
+  if (!dose) return;
+  Object.assign(dose, updates);
+  await db.put('basalDoses', dose);
 }
 
 export async function getBasalDoseForDate(date) {

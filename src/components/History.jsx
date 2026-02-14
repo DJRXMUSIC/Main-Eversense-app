@@ -1,7 +1,10 @@
 import { useState, useMemo } from 'react';
 
-export default function History({ bolusDoses, basalDoses, glucoseData }) {
-  const [expanded, setExpanded] = useState(false);
+export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteBolus, onEditBasal, onDeleteBasal }) {
+  const [expanded, setExpanded] = useState(true);
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   // Merge all events into a single sorted timeline
   const events = useMemo(() => {
@@ -12,6 +15,7 @@ export default function History({ bolusDoses, basalDoses, glucoseData }) {
         id: dose.id,
         type: 'bolus',
         time: new Date(dose.timestamp),
+        units: dose.units,
         label: `${dose.units}u Humalog`,
         detail: new Date(dose.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
       });
@@ -22,6 +26,7 @@ export default function History({ bolusDoses, basalDoses, glucoseData }) {
         id: dose.id,
         type: 'basal',
         time: new Date(dose.date + 'T12:00:00'),
+        units: dose.units,
         label: `${dose.units}u Toujeo`,
         detail: 'Daily basal',
       });
@@ -53,10 +58,39 @@ export default function History({ bolusDoses, basalDoses, glucoseData }) {
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
+  const startEdit = (event) => {
+    setEditingId(event.id);
+    setEditValue(String(event.units));
+    setConfirmDeleteId(null);
+  };
+
+  const saveEdit = (event) => {
+    const newUnits = parseInt(editValue);
+    if (!newUnits || newUnits <= 0) {
+      setEditingId(null);
+      return;
+    }
+    if (event.type === 'bolus') {
+      onEditBolus(event.id, newUnits);
+    } else {
+      onEditBasal(event.id, newUnits);
+    }
+    setEditingId(null);
+  };
+
+  const handleDelete = (event) => {
+    if (event.type === 'bolus') {
+      onDeleteBolus(event.id);
+    } else {
+      onDeleteBasal(event.id);
+    }
+    setConfirmDeleteId(null);
+  };
+
   const displayGroups = expanded ? grouped : grouped.slice(0, 2);
 
   return (
-    <div className="px-4 pb-4">
+    <div className="px-4 pb-3">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-2 text-sm text-text-secondary mb-2"
@@ -65,7 +99,7 @@ export default function History({ bolusDoses, basalDoses, glucoseData }) {
         History ({events.length} entries)
       </button>
 
-      {expanded || events.length <= 8 ? (
+      {(expanded || events.length <= 8) && (
         <div className="space-y-3">
           {displayGroups.map(([dateStr, dateEvents]) => (
             <div key={dateStr}>
@@ -76,16 +110,85 @@ export default function History({ bolusDoses, basalDoses, glucoseData }) {
                 {dateEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-center gap-3 px-4 py-2.5 border-b border-bg-tertiary last:border-b-0"
+                    className="border-b border-bg-tertiary last:border-b-0"
                   >
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${event.type === 'bolus' ? 'bg-accent' : 'bg-glucose'}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">{event.label}</div>
-                      <div className="text-xs text-text-secondary">{event.detail}</div>
-                    </div>
-                    <div className="text-xs text-text-secondary flex-shrink-0">
-                      {event.type === 'bolus' ? 'Bolus' : 'Basal'}
-                    </div>
+                    {confirmDeleteId === event.id ? (
+                      /* Delete confirmation row */
+                      <div className="flex items-center gap-2 px-4 py-2.5">
+                        <div className="flex-1 text-sm text-danger">Delete {event.label}?</div>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-bg-tertiary text-text-secondary"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleDelete(event)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-danger text-white"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    ) : editingId === event.id ? (
+                      /* Edit row */
+                      <div className="flex items-center gap-2 px-4 py-2">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${event.type === 'bolus' ? 'bg-accent' : 'bg-glucose'}`} />
+                        <div className="flex items-center gap-1 flex-1">
+                          <button
+                            onClick={() => setEditValue(String(Math.max(1, (parseInt(editValue) || 0) - 1)))}
+                            className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
+                          >-</button>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value.replace(/\D/g, ''))}
+                            className="w-14 h-8 text-center text-sm font-bold bg-bg-primary rounded-lg border border-bg-tertiary outline-none"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => setEditValue(String((parseInt(editValue) || 0) + 1))}
+                            className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
+                          >+</button>
+                          <span className="text-xs text-text-secondary ml-1">u</span>
+                        </div>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="px-2 py-1.5 rounded-lg text-xs font-medium bg-bg-tertiary text-text-secondary"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => saveEdit(event)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-white"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    ) : (
+                      /* Normal row with swipe-like action buttons */
+                      <div className="flex items-center gap-3 px-4 py-2.5">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${event.type === 'bolus' ? 'bg-accent' : 'bg-glucose'}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium">{event.label}</div>
+                          <div className="text-xs text-text-secondary">{event.detail}</div>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => startEdit(event)}
+                            className="px-2 py-1 rounded-md text-xs bg-bg-tertiary text-text-secondary active:bg-bg-primary"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => { setConfirmDeleteId(event.id); setEditingId(null); }}
+                            className="px-2 py-1 rounded-md text-xs bg-danger/20 text-danger active:bg-danger/30"
+                          >
+                            Del
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -101,7 +204,7 @@ export default function History({ bolusDoses, basalDoses, glucoseData }) {
             </button>
           )}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

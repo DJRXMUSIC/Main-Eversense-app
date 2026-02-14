@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -12,7 +12,7 @@ import {
   Legend,
 } from 'chart.js';
 import 'chartjs-adapter-date-fns';
-import { getDoseIOBCurve, getAggregatedIOBCurve } from '../lib/iob';
+import { getDoseIOBCurve, getAggregatedIOBCurve, calcTotalIOB } from '../lib/iob';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, TimeScale, Legend);
 
@@ -29,6 +29,10 @@ const FUTURE_HOURS = 1;
 
 export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
   const now = useMemo(() => Date.now(), []);
+  const chartRef = useRef(null);
+
+  // Crosshair state: tapped time & data at that point
+  const [crosshair, setCrosshair] = useState(null);
 
   // Scrollable: offset in hours. 0 = live view, negative = earlier
   const [offsetHours, setOffsetHours] = useState(0);
@@ -179,6 +183,57 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     return ds;
   }, [glucosePoints, doseCurves, aggregatedIOB, doseMarkers]);
 
+  // Compute crosshair data from tap position
+  const handleChartClick = useCallback((event) => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const { chartArea, scales } = chart;
+    if (!chartArea) return;
+
+    const rect = chart.canvas.getBoundingClientRect();
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const x = clientX - rect.left;
+
+    if (x < chartArea.left || x > chartArea.right) {
+      setCrosshair(null);
+      return;
+    }
+
+    const timeAtX = scales.x.getValueForPixel(x);
+
+    // Find nearest glucose value
+    let nearestBG = null;
+    let minDist = Infinity;
+    for (const p of glucosePoints) {
+      const dist = Math.abs(p.x - timeAtX);
+      if (dist < minDist) {
+        minDist = dist;
+        nearestBG = p;
+      }
+    }
+    // Only show BG if within ~15 min of tap point
+    const bgValue = (nearestBG && minDist < 15 * 60 * 1000) ? nearestBG.y : null;
+
+    // Compute IOB at this time
+    const iobAtTime = calcTotalIOB(bolusDoses, new Date(timeAtX), dia, peak);
+
+    const timeStr = new Date(timeAtX).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    });
+
+    setCrosshair({
+      pixelX: x,
+      time: timeAtX,
+      timeStr,
+      bg: bgValue,
+      iob: iobAtTime,
+    });
+  }, [glucosePoints, bolusDoses, dia, peak]);
+
+  const clearCrosshair = useCallback(() => {
+    setCrosshair(null);
+  }, []);
+
   const options = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -190,30 +245,7 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     },
     plugins: {
       legend: { display: false },
-      tooltip: {
-        backgroundColor: '#333',
-        titleFont: { size: 13, weight: 'bold' },
-        bodyFont: { size: 13 },
-        padding: 10,
-        displayColors: false,
-        callbacks: {
-          title: (items) => {
-            if (items[0]) {
-              const d = new Date(items[0].parsed.x);
-              return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-            }
-            return '';
-          },
-          label: (item) => {
-            const label = item.dataset.label || '';
-            if (label === 'Glucose') return `  ${item.parsed.y} mg/dL`;
-            if (label === 'Total IOB') return `  IOB: ${item.parsed.y.toFixed(1)}u`;
-            if (label === 'Bolus Doses') return `  Bolus: ${item.parsed.y}u`;
-            if (label.includes('@')) return `  ${label}: ${item.parsed.y.toFixed(1)}u remaining`;
-            return '';
-          },
-        },
-      },
+      tooltip: { enabled: false },
     },
     scales: {
       x: {
@@ -327,6 +359,59 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
     },
   }), [activeDoses, windowStart, windowEnd]);
 
+  // Crosshair plugin — draws the vertical line on the canvas
+  const crosshairPlugin = useMemo(() => ({
+    id: 'crosshairLine',
+    afterDraw: (chart) => {
+      if (!crosshair) return;
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea) return;
+
+      const x = scales.x.getPixelForValue(crosshair.time);
+      if (x < chartArea.left || x > chartArea.right) return;
+
+      // Vertical line
+      ctx.save();
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.moveTo(x, chartArea.top);
+      ctx.lineTo(x, chartArea.bottom);
+      ctx.stroke();
+      ctx.restore();
+
+      // BG dot on glucose line
+      if (crosshair.bg !== null) {
+        const yBG = scales.yGlucose.getPixelForValue(crosshair.bg);
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(x, yBG, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = GLUCOSE_COLOR;
+        ctx.beginPath();
+        ctx.arc(x, yBG, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // IOB dot on insulin line
+      if (crosshair.iob > 0.05) {
+        const yIOB = scales.yInsulin.getPixelForValue(crosshair.iob);
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(x, yIOB, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = ACCENT;
+        ctx.beginPath();
+        ctx.arc(x, yIOB, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    },
+  }), [crosshair]);
+
   // Data count for the current window
   const pointCount = glucosePoints.length;
 
@@ -338,12 +423,15 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
 
   const goBack = useCallback(() => {
     setOffsetHours(prev => Math.max(-(maxBackHours - PAST_HOURS), prev - 3));
+    setCrosshair(null);
   }, []);
   const goForward = useCallback(() => {
     setOffsetHours(prev => Math.min(0, prev + 3));
+    setCrosshair(null);
   }, []);
   const goToNow = useCallback(() => {
     setOffsetHours(0);
+    setCrosshair(null);
   }, []);
 
   // Time range label
@@ -385,12 +473,39 @@ export default function GlucoseChart({ glucoseData, bolusDoses, settings }) {
         )}
       </div>
 
+      {/* Crosshair info bar */}
+      {crosshair && (
+        <div className="flex items-center justify-between mx-2 mb-1 px-3 py-1.5 bg-bg-secondary rounded-lg">
+          <div className="text-xs font-medium text-text-primary">{crosshair.timeStr}</div>
+          <div className="flex items-center gap-4">
+            {crosshair.bg !== null && (
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-glucose" />
+                <span className="text-xs font-bold text-glucose">{crosshair.bg}</span>
+                <span className="text-[10px] text-text-secondary">mg/dL</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+              <span className="text-xs font-bold text-accent">{crosshair.iob.toFixed(1)}</span>
+              <span className="text-[10px] text-text-secondary">u IOB</span>
+            </div>
+          </div>
+          <button onClick={clearCrosshair} className="text-text-secondary text-xs ml-2">&times;</button>
+        </div>
+      )}
+
       {/* Chart */}
-      <div style={{ height: '300px' }}>
+      <div
+        style={{ height: '300px' }}
+        onClick={handleChartClick}
+        onTouchStart={handleChartClick}
+      >
         <Line
+          ref={chartRef}
           data={{ datasets }}
           options={options}
-          plugins={[targetRangePlugin, nowLinePlugin, doseLabelsPlugin]}
+          plugins={[targetRangePlugin, nowLinePlugin, doseLabelsPlugin, crosshairPlugin]}
         />
       </div>
 

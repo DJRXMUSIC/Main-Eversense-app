@@ -8,6 +8,9 @@ import {
   addBasalDose,
   addGlucoseReadings,
   deleteBolusDose,
+  updateBolusDose,
+  deleteBasalDose,
+  updateBasalDose,
   getSettings,
   setSetting,
   cleanupOldData,
@@ -149,6 +152,21 @@ export function useAppData() {
     await loadData();
   }, [loadData]);
 
+  const editBolus = useCallback(async (id, units) => {
+    await updateBolusDose(id, { units: Math.round(units) });
+    await loadData();
+  }, [loadData]);
+
+  const removeBasal = useCallback(async (id) => {
+    await deleteBasalDose(id);
+    await loadData();
+  }, [loadData]);
+
+  const editBasal = useCallback(async (id, units) => {
+    await updateBasalDose(id, { units });
+    await loadData();
+  }, [loadData]);
+
   const updateSetting = useCallback(async (key, value) => {
     await setSetting(key, value);
     const s = await getSettings();
@@ -185,6 +203,9 @@ export function useAppData() {
     logBasal,
     importGlucose,
     removeBolus,
+    editBolus,
+    removeBasal,
+    editBasal,
     updateSetting,
     doExport,
     doClearAll,
