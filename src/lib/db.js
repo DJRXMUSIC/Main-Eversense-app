@@ -172,6 +172,10 @@ const DEFAULT_SETTINGS = {
   graphDisplayLow: 50,
   graphDisplayHigh: 350,
   defaultBasalUnits: 24,
+  theme: 'fidelity',
+  dataSource: 'health-export',
+  nightscoutUrl: '',
+  appIcon: 'default',
 };
 
 export async function getSetting(key) {

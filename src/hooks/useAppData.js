@@ -19,6 +19,7 @@ import {
 } from '../lib/db';
 import { calcTotalIOB } from '../lib/iob';
 import { syncGlucoseReadings, pushWidgetData } from '../lib/sync';
+import { applyTheme } from '../lib/themes';
 
 export function useAppData() {
   const [glucoseData, setGlucoseData] = useState([]);
@@ -40,80 +41,97 @@ export function useAppData() {
       const s = await getSettings();
       setSettingsState(s);
 
-      // Load glucose for scrollable graph (past 3 days — chart navigates within this)
+      // Apply theme immediately on load
+      applyTheme(s.theme || 'fidelity');
+
       const now = new Date();
       const windowStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
       const glucose = await getGlucoseReadings(windowStart.toISOString(), now.toISOString());
       setGlucoseData(glucose);
 
-      // Load all bolus doses (need full range for IOB calc)
       const allBolus = await getAllBolusDoses();
       setBolusDoses(allBolus);
 
-      // Load recent basal doses
       const basal = await getBasalDoses(7);
       setBasalDoses(basal);
 
-      // Today's basal
       const todayB = await getBasalDoseForDate(today);
       setTodayBasal(todayB);
 
-      // Calculate current IOB
       const iob = calcTotalIOB(allBolus, now, s.bolusDIA, s.bolusPeakTime);
       setCurrentIOB(iob);
 
       setLoading(false);
 
-      // Push widget snapshot to backend (fire and forget)
-      const todayB2 = await getBasalDoseForDate(today);
-      pushWidgetData({ iob, glucoseData: glucose, todayBasal: todayB2 });
+      // Push widget snapshot (fire and forget)
+      pushWidgetData({ iob, glucoseData: glucose, todayBasal: todayB });
     } catch (err) {
       console.error('Failed to load data:', err);
       setLoading(false);
     }
   }, [today]);
 
-  // Auto-sync glucose readings from backend on launch
+  // Sync using the configured data source
   const doSync = useCallback(async () => {
+    if (!settings) return;
     try {
       setSyncing(true);
-      const result = await syncGlucoseReadings();
+      const result = await syncGlucoseReadings(
+        settings.dataSource || 'health-export',
+        settings.nightscoutUrl || null
+      );
       setLastSyncResult({ time: new Date(), ...result });
       if (result.imported > 0) {
         await loadData();
       }
     } catch (err) {
-      console.error('Auto-sync failed:', err);
+      console.error('Sync failed:', err);
       setLastSyncResult({ time: new Date(), error: err.message });
     } finally {
       setSyncing(false);
     }
-  }, [loadData]);
+  }, [loadData, settings]);
 
-  // Initial load and cleanup
+  // Initial load
   useEffect(() => {
     cleanupOldData().then(loadData);
   }, [loadData]);
 
-  // Auto-sync once after initial load completes
+  // Auto-sync once after initial load
   useEffect(() => {
-    if (!loading && !hasSynced.current) {
+    if (!loading && !hasSynced.current && settings) {
       hasSynced.current = true;
       doSync();
     }
-  }, [loading, doSync]);
+  }, [loading, doSync, settings]);
 
-  // Update IOB every minute
+  // Update IOB every minute — only filter recent doses for performance
   useEffect(() => {
     iobInterval.current = setInterval(() => {
       if (bolusDoses.length > 0 && settings) {
-        const iob = calcTotalIOB(bolusDoses, new Date(), settings.bolusDIA, settings.bolusPeakTime);
+        const diaMs = (settings.bolusDIA || 300) * 60 * 1000;
+        const now = new Date();
+        const recentDoses = bolusDoses.filter(d =>
+          now.getTime() - new Date(d.timestamp).getTime() < diaMs
+        );
+        const iob = calcTotalIOB(recentDoses, now, settings.bolusDIA, settings.bolusPeakTime);
         setCurrentIOB(iob);
       }
     }, 60000);
 
     return () => clearInterval(iobInterval.current);
   }, [bolusDoses, settings]);
+
+  // Apply theme when setting changes
+  const updateSetting = useCallback(async (key, value) => {
+    await setSetting(key, value);
+    const s = await getSettings();
+    setSettingsState(s);
+
+    if (key === 'theme') {
+      applyTheme(value);
+    }
+  }, []);
 
   const logBolus = useCallback(async (units, timestamp) => {
     const dose = {
@@ -166,12 +184,6 @@ export function useAppData() {
     await updateBasalDose(id, { units });
     await loadData();
   }, [loadData]);
-
-  const updateSetting = useCallback(async (key, value) => {
-    await setSetting(key, value);
-    const s = await getSettings();
-    setSettingsState(s);
-  }, []);
 
   const doExport = useCallback(async () => {
     const data = await exportAllData();

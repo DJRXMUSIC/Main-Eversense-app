@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAppData } from './hooks/useAppData';
 import Header from './components/Header';
 import GlucoseChart from './components/GlucoseChart';
-import BolusModal from './components/BolusModal';
-import BasalModal from './components/BasalModal';
-import ImportModal from './components/ImportModal';
 import History from './components/History';
 import Stats from './components/Stats';
-import Settings from './components/Settings';
 import { getAllGlucoseReadings, getAllBolusDoses, getAllBasalDoses } from './lib/db';
+
+// Lazy-load modals for faster initial render
+const BolusModal = lazy(() => import('./components/BolusModal'));
+const BasalModal = lazy(() => import('./components/BasalModal'));
+const ImportModal = lazy(() => import('./components/ImportModal'));
+const Settings = lazy(() => import('./components/Settings'));
 
 function App() {
   const {
@@ -63,10 +65,12 @@ function App() {
   if (loading || !settings) {
     return (
       <div className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <div className="text-text-secondary">Loading...</div>
+        <div className="text-text-secondary text-sm">Loading...</div>
       </div>
     );
   }
+
+  const themeId = settings.theme || 'fidelity';
 
   return (
     <div className="min-h-screen bg-bg-primary max-w-lg mx-auto relative">
@@ -86,15 +90,17 @@ function App() {
         onOpenSettings={() => setShowSettings(true)}
         syncing={syncing}
         onSync={doSync}
+        settings={settings}
       />
 
       <GlucoseChart
         glucoseData={glucoseData}
         bolusDoses={bolusDoses}
         settings={settings}
+        themeId={themeId}
       />
 
-      {/* Quick actions — Bolus is primary */}
+      {/* Quick actions */}
       <div className="px-4 py-2 space-y-2">
         <button
           onClick={() => setShowBolus(true)}
@@ -129,36 +135,28 @@ function App() {
 
       <Stats bolusDoses={bolusDoses} basalDoses={basalDoses} />
 
-      {/* Modals */}
-      {showBolus && (
-        <BolusModal
-          onClose={() => setShowBolus(false)}
-          onSave={logBolus}
-        />
-      )}
-      {showBasal && (
-        <BasalModal
-          onClose={() => setShowBasal(false)}
-          onSave={logBasal}
-          defaultUnits={settings.defaultBasalUnits}
-        />
-      )}
-      {showImport && (
-        <ImportModal
-          onClose={() => { setShowImport(false); refreshData(); }}
-          onImport={importGlucose}
-        />
-      )}
-      {showSettings && (
-        <Settings
-          settings={settings}
-          onUpdateSetting={updateSetting}
-          onExport={doExport}
-          onClearAll={doClearAll}
-          onClose={() => setShowSettings(false)}
-          dataCounts={dataCounts}
-        />
-      )}
+      {/* Lazy-loaded modals */}
+      <Suspense fallback={null}>
+        {showBolus && (
+          <BolusModal onClose={() => setShowBolus(false)} onSave={logBolus} />
+        )}
+        {showBasal && (
+          <BasalModal onClose={() => setShowBasal(false)} onSave={logBasal} defaultUnits={settings.defaultBasalUnits} />
+        )}
+        {showImport && (
+          <ImportModal onClose={() => { setShowImport(false); refreshData(); }} onImport={importGlucose} />
+        )}
+        {showSettings && (
+          <Settings
+            settings={settings}
+            onUpdateSetting={updateSetting}
+            onExport={doExport}
+            onClearAll={doClearAll}
+            onClose={() => setShowSettings(false)}
+            dataCounts={dataCounts}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

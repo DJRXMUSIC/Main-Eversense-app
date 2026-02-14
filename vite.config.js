@@ -12,13 +12,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-generator.js'],
       manifest: {
         name: 'Supercharged - Insulin Tracker',
         short_name: 'Supercharged',
         description: 'Track blood glucose and insulin with IOB calculations',
-        theme_color: '#1a1a1a',
-        background_color: '#1a1a1a',
+        theme_color: '#0f0f0f',
+        background_color: '#0f0f0f',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
