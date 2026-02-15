@@ -32,6 +32,7 @@ export function useAppData() {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState(null);
   const iobInterval = useRef(null);
+  const syncInterval = useRef(null);
   const hasSynced = useRef(false);
 
   const today = new Date().toISOString().split('T')[0];
@@ -104,6 +105,18 @@ export function useAppData() {
       doSync();
     }
   }, [loading, doSync, settings]);
+
+  // Auto-refresh polling for real-time data sources (every 60s)
+  useEffect(() => {
+    clearInterval(syncInterval.current);
+    const realTimeSources = ['eversense-dms', 'nightscout', 'nightscout-local', 'xdrip'];
+    if (settings && realTimeSources.includes(settings.dataSource)) {
+      syncInterval.current = setInterval(() => {
+        if (!syncing) doSync();
+      }, 60000);
+    }
+    return () => clearInterval(syncInterval.current);
+  }, [settings?.dataSource, doSync, syncing]);
 
   // Update IOB every minute — only filter recent doses for performance
   useEffect(() => {
