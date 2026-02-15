@@ -132,9 +132,9 @@ export default async function handler(event) {
     });
     const curData = curRes.ok ? await curRes.json() : [];
 
-    // Get last 15 min history
+    // Get last 3 hours of history to backfill any gaps
     const now = new Date();
-    const ago = new Date(now.getTime() - 15 * 60 * 1000);
+    const ago = new Date(now.getTime() - 3 * 60 * 60 * 1000);
     const fmt = (d) => d.toISOString().replace(/\.\d+Z$/, "");
     const histRes = await fetch(
       `${DMS_HISTORY_URL}?UserID=${state.userId}&startDate=${fmt(ago)}&endDate=${fmt(now)}`,

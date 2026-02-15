@@ -249,9 +249,9 @@ export default async function handler() {
     // Fetch current value
     const current = await getCurrentValues(state.accessToken, state.userId);
 
-    // Fetch last 15 minutes of history to catch any missed readings
+    // Fetch last 3 hours of history to backfill any gaps
     const now = new Date();
-    const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    const fifteenMinsAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
     const history = await getHistoricalReadings(
       state.accessToken,
       state.userId,

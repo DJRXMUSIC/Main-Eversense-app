@@ -34,6 +34,7 @@ export function useAppData() {
   const iobInterval = useRef(null);
   const syncInterval = useRef(null);
   const hasSynced = useRef(false);
+  const syncingRef = useRef(false);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -75,20 +76,23 @@ export function useAppData() {
   // Sync using the configured data source
   const doSync = useCallback(async () => {
     if (!settings) return;
+    if (syncingRef.current) return;
     try {
+      syncingRef.current = true;
       setSyncing(true);
       const result = await syncGlucoseReadings(
         settings.dataSource || 'health-export',
         settings.nightscoutUrl || null
       );
       setLastSyncResult({ time: new Date(), ...result });
-      if (result.imported > 0) {
-        await loadData();
-      }
+      // Always reload data — server may have new readings even if
+      // this particular trigger didn't import (e.g. background poller did)
+      await loadData();
     } catch (err) {
       console.error('Sync failed:', err);
       setLastSyncResult({ time: new Date(), error: err.message });
     } finally {
+      syncingRef.current = false;
       setSyncing(false);
     }
   }, [loadData, settings]);
@@ -106,17 +110,18 @@ export function useAppData() {
     }
   }, [loading, doSync, settings]);
 
-  // Auto-refresh polling for real-time data sources (every 60s)
+  // Auto-refresh polling for real-time data sources (every 30s)
+  // Use syncingRef (not syncing state) to avoid resetting the timer on every sync
   useEffect(() => {
     clearInterval(syncInterval.current);
     const realTimeSources = ['eversense-dms', 'nightscout', 'nightscout-local', 'xdrip'];
     if (settings && realTimeSources.includes(settings.dataSource)) {
       syncInterval.current = setInterval(() => {
-        if (!syncing) doSync();
-      }, 60000);
+        if (!syncingRef.current) doSync();
+      }, 30000);
     }
     return () => clearInterval(syncInterval.current);
-  }, [settings?.dataSource, doSync, syncing]);
+  }, [settings?.dataSource, doSync]);
 
   // Update IOB every minute — only filter recent doses for performance
   useEffect(() => {
