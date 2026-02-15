@@ -63,10 +63,10 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
 
   return (
     <div className="fixed inset-0 z-50 bg-bg-primary overflow-y-auto">
-      <div className="max-w-lg mx-auto p-4">
+      <div className="max-w-lg mx-auto p-4" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))' }}>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold">Settings</h2>
-          <button onClick={onClose} className="text-text-secondary text-2xl leading-none">&times;</button>
+          <button onClick={onClose} className="text-text-secondary text-2xl leading-none w-10 h-10 flex items-center justify-center">&times;</button>
         </div>
 
         {/* Theme Picker */}

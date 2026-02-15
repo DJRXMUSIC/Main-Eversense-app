@@ -73,7 +73,7 @@ function App() {
   const themeId = settings.theme || 'fidelity';
 
   return (
-    <div className="min-h-screen bg-bg-primary max-w-lg mx-auto relative">
+    <div className="min-h-screen bg-bg-primary max-w-lg mx-auto relative" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       {showInstallPrompt && (
         <div className="bg-bg-secondary mx-4 mt-2 p-3 rounded-xl flex items-center gap-3">
           <div className="flex-1 text-sm text-text-secondary">
