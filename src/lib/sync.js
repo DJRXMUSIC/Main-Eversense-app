@@ -12,58 +12,99 @@ function getApiKey() {
 
 /**
  * Sync glucose readings from the configured data source(s).
- *
- * dataSource options:
- *   'health-export'     — Original Health Auto Export endpoint
- *   'eversense-dms'     — Trigger DMS poller, then fetch from our blob store
- *   'nightscout-local'  — Fetch from our Nightscout-compat endpoint
- *   'nightscout'        — Fetch from external Nightscout instance
- *   'xdrip'             — Fetch from xDrip+ local web service
  */
 export async function syncGlucoseReadings(dataSource = 'health-export', nightscoutUrl = null) {
   const apiKey = getApiKey();
 
-  // Eversense DMS: trigger server-side poll, then fetch results
   if (dataSource === 'eversense-dms') {
     return syncFromDMS(apiKey);
   }
 
-  // External Nightscout or xDrip+ web service
   if ((dataSource === 'nightscout' || dataSource === 'xdrip') && nightscoutUrl) {
     return syncFromExternalNightscout(nightscoutUrl, apiKey);
   }
 
-  // Our own Nightscout-compatible endpoint
   if (dataSource === 'nightscout-local') {
     return syncFromOwnNightscout(apiKey);
   }
 
-  // Default: Health Auto Export
   return syncFromHealthExport(apiKey);
 }
 
 /**
- * Trigger the DMS poller on the server, then fetch the latest readings.
+ * DMS sync — single round-trip.  The trigger returns readings directly
+ * so we don't need a second fetch from /api/glucose.
+ *
+ * Falls back to /api/glucose if the trigger doesn't return readings
+ * (e.g. older server version still deployed).
  */
 async function syncFromDMS(apiKey) {
   if (!apiKey) return { imported: 0, skipped: 0, error: 'No API key configured' };
 
-  // Step 1: Trigger DMS poll on server
+  let triggerData = null;
+
+  // Step 1: Trigger DMS poll — the response now includes readings[]
   try {
     const triggerUrl = new URL(DMS_TRIGGER_PATH, window.location.origin);
     triggerUrl.searchParams.set('key', apiKey);
     triggerUrl.searchParams.set('action', 'poll');
     const triggerRes = await fetch(triggerUrl);
-    if (triggerRes.ok) {
-      const triggerData = await triggerRes.json();
-      console.log('DMS trigger result:', triggerData);
+
+    if (!triggerRes.ok) {
+      const errBody = await triggerRes.text().catch(() => '');
+      console.warn(`DMS trigger HTTP ${triggerRes.status}:`, errBody);
+    } else {
+      triggerData = await triggerRes.json();
+      console.log('DMS trigger result:', {
+        success: triggerData.success,
+        fetched: triggerData.fetched,
+        imported: triggerData.imported,
+        total: triggerData.total,
+        latest: triggerData.latest,
+        debug: triggerData.debug,
+      });
     }
   } catch (err) {
-    console.warn('DMS trigger failed (will still try fetch):', err.message);
+    console.warn('DMS trigger network error:', err.message);
   }
 
-  // Step 2: Fetch readings from our glucose endpoint (DMS poller stores in same blob)
-  return syncFromHealthExport(apiKey);
+  // Step 2: If the trigger returned readings directly, use them
+  if (triggerData?.readings && triggerData.readings.length > 0) {
+    const result = await addGlucoseReadings(triggerData.readings);
+    return {
+      imported: result.added,
+      skipped: result.skipped,
+      fetched: triggerData.fetched || 0,
+      debug: triggerData.debug,
+    };
+  }
+
+  // Step 3: Fallback — fetch from blob store (covers case where trigger
+  // succeeded server-side but returned no readings array, or the
+  // background poller stored readings between syncs)
+  return syncFromBlobStore(apiKey);
+}
+
+/**
+ * Fetch readings from the blob store via /api/glucose.
+ * For DMS, don't send `since` — always fetch the last 6 hours to avoid
+ * missing data due to timestamp mismatches.
+ */
+async function syncFromBlobStore(apiKey) {
+  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+
+  const url = new URL(API_PATH, window.location.origin);
+  url.searchParams.set('key', apiKey);
+  url.searchParams.set('since', sixHoursAgo);
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Glucose fetch failed: ${response.status}`);
+
+  const { readings } = await response.json();
+  if (!readings || readings.length === 0) return { imported: 0, skipped: 0 };
+
+  const result = await addGlucoseReadings(readings);
+  return { imported: result.added, skipped: result.skipped };
 }
 
 async function syncFromHealthExport(apiKey) {

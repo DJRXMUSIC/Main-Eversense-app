@@ -112,15 +112,30 @@ export function useAppData() {
 
   // Auto-refresh polling for real-time data sources (every 30s)
   // Use syncingRef (not syncing state) to avoid resetting the timer on every sync
+  // Also re-sync when the tab regains focus (covers phone lock/unlock)
   useEffect(() => {
     clearInterval(syncInterval.current);
     const realTimeSources = ['eversense-dms', 'nightscout', 'nightscout-local', 'xdrip'];
-    if (settings && realTimeSources.includes(settings.dataSource)) {
+    const isRealTime = settings && realTimeSources.includes(settings.dataSource);
+
+    if (isRealTime) {
       syncInterval.current = setInterval(() => {
         if (!syncingRef.current) doSync();
       }, 30000);
     }
-    return () => clearInterval(syncInterval.current);
+
+    // Re-sync when tab becomes visible again (phone wake, tab switch)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && isRealTime && !syncingRef.current) {
+        doSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(syncInterval.current);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [settings?.dataSource, doSync]);
 
   // Update IOB every minute — only filter recent doses for performance
