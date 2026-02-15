@@ -100,6 +100,40 @@ export const THEMES = {
       danger: '#f87171',
     },
   },
+  light: {
+    id: 'light',
+    name: 'Light',
+    preview: '#ffffff',
+    light: true,
+    colors: {
+      accent: '#0d7c3d',
+      accentRgb: '13, 124, 61',
+      bgPrimary: '#f5f5f5',
+      bgSecondary: '#ffffff',
+      bgTertiary: '#e5e5e5',
+      textPrimary: '#171717',
+      textSecondary: '#6b7280',
+      glucose: '#2563eb',
+      danger: '#dc2626',
+    },
+  },
+  nightlight: {
+    id: 'nightlight',
+    name: 'Night Light',
+    preview: '#3d2b1a',
+    light: false,
+    colors: {
+      accent: '#d4915c',
+      accentRgb: '212, 145, 92',
+      bgPrimary: '#1a1008',
+      bgSecondary: '#241a0e',
+      bgTertiary: '#332616',
+      textPrimary: '#f5e6d3',
+      textSecondary: '#b89a7a',
+      glucose: '#d4915c',
+      danger: '#e57373',
+    },
+  },
 };
 
 export const DEFAULT_THEME = 'fidelity';
