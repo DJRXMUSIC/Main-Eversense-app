@@ -44,6 +44,7 @@ async function syncFromDMS(apiKey) {
   let triggerData = null;
 
   // Step 1: Trigger DMS poll — the response now includes readings[]
+  let triggerError = null;
   try {
     const triggerUrl = new URL(DMS_TRIGGER_PATH, window.location.origin);
     triggerUrl.searchParams.set('key', apiKey);
@@ -52,19 +53,22 @@ async function syncFromDMS(apiKey) {
 
     if (!triggerRes.ok) {
       const errBody = await triggerRes.text().catch(() => '');
-      console.warn(`DMS trigger HTTP ${triggerRes.status}:`, errBody);
+      triggerError = `DMS HTTP ${triggerRes.status}`;
+      try {
+        const errJson = JSON.parse(errBody);
+        if (errJson.error) triggerError = errJson.error;
+        if (errJson.debug) triggerError += ` [${errJson.debug.join(', ')}]`;
+      } catch {}
+      console.warn('DMS trigger error:', triggerError);
     } else {
       triggerData = await triggerRes.json();
-      console.log('DMS trigger result:', {
-        success: triggerData.success,
-        fetched: triggerData.fetched,
-        imported: triggerData.imported,
-        total: triggerData.total,
-        latest: triggerData.latest,
-        debug: triggerData.debug,
-      });
+      console.log('DMS trigger result:', triggerData);
+      if (!triggerData.success && triggerData.error) {
+        triggerError = triggerData.error;
+      }
     }
   } catch (err) {
+    triggerError = `Network error: ${err.message}`;
     console.warn('DMS trigger network error:', err.message);
   }
 
@@ -79,10 +83,18 @@ async function syncFromDMS(apiKey) {
     };
   }
 
-  // Step 3: Fallback — fetch from blob store (covers case where trigger
-  // succeeded server-side but returned no readings array, or the
-  // background poller stored readings between syncs)
-  return syncFromBlobStore(apiKey);
+  // Step 3: Fallback — fetch from blob store
+  const blobResult = await syncFromBlobStore(apiKey);
+
+  // If both trigger and blob returned nothing, surface the trigger error
+  if (blobResult.imported === 0 && triggerError) {
+    return { ...blobResult, error: triggerError, debug: triggerData?.debug };
+  }
+  // If trigger fetched 0 readings but no error, note it
+  if (blobResult.imported === 0 && triggerData && triggerData.fetched === 0) {
+    return { ...blobResult, debug: triggerData.debug || ['DMS returned 0 readings'] };
+  }
+  return blobResult;
 }
 
 /**

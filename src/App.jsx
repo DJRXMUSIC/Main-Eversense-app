@@ -32,6 +32,7 @@ function App() {
     removeBasal,
     editBasal,
     syncing,
+    lastSyncResult,
     doSync,
     refreshData,
   } = useAppData();
@@ -89,6 +90,7 @@ function App() {
         glucoseData={glucoseData}
         onOpenSettings={() => setShowSettings(true)}
         syncing={syncing}
+        lastSyncResult={lastSyncResult}
         onSync={doSync}
         settings={settings}
       />

@@ -90,7 +90,7 @@ export function useAppData() {
       await loadData();
     } catch (err) {
       console.error('Sync failed:', err);
-      setLastSyncResult({ time: new Date(), error: err.message });
+      setLastSyncResult({ time: new Date(), error: err.message, imported: 0 });
     } finally {
       syncingRef.current = false;
       setSyncing(false);

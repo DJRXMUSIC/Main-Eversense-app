@@ -13,7 +13,7 @@ const DIRECTION_ARROWS = {
   NONE: '',
 };
 
-export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSettings, syncing, onSync, settings }) {
+export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSettings, syncing, lastSyncResult, onSync, settings }) {
   const lastReading = glucoseData.length > 0 ? glucoseData[glucoseData.length - 1] : null;
 
   const bgStatus = useMemo(() => {
@@ -44,10 +44,19 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
     return DIRECTION_ARROWS[lastReading.direction] || '';
   }, [lastReading]);
 
+  const syncStatus = useMemo(() => {
+    if (!lastSyncResult) return null;
+    const secsAgo = Math.round((Date.now() - new Date(lastSyncResult.time).getTime()) / 1000);
+    if (secsAgo > 120) return null; // Hide after 2 minutes
+    if (lastSyncResult.error) return { text: `Sync error: ${lastSyncResult.error}`, ok: false };
+    if (lastSyncResult.imported > 0) return { text: `+${lastSyncResult.imported} new readings`, ok: true };
+    return { text: 'Synced — no new data', ok: true };
+  }, [lastSyncResult]);
+
   return (
     <div className="px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-1">
       {/* Top bar: app name + action buttons */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <h1 className="text-base font-bold tracking-tight opacity-60">Supercharged</h1>
           {syncing && (
@@ -79,6 +88,16 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
           </button>
         </div>
       </div>
+
+      {/* Sync status banner */}
+      {syncStatus && (
+        <div className={`text-[10px] mb-2 px-2 py-1 rounded-lg ${syncStatus.ok ? 'text-text-secondary' : 'text-danger bg-danger/10'}`}>
+          {syncStatus.text}
+          {lastSyncResult?.debug && lastSyncResult.debug.length > 0 && (
+            <span className="opacity-60"> [{lastSyncResult.debug.join(', ')}]</span>
+          )}
+        </div>
+      )}
 
       {/* Hero: BG + IOB side by side, big and bold */}
       <div className="flex items-stretch gap-3 mb-2">

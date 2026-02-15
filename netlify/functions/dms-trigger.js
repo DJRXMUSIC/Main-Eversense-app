@@ -224,7 +224,10 @@ export default async function handler(event) {
     });
     unique.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
-    debug.push(`total unique: ${unique.length}`);
+    debug.push(`unique: ${unique.length}`);
+    if (unique.length === 0) {
+      debug.push("no readings from any endpoint");
+    }
 
     // Build full reading objects for both storage and direct return
     const fullReadings = unique.map((r) => ({
