@@ -14,7 +14,7 @@ import { getStore } from "@netlify/blobs";
  *   EVERSENSE_PASSWORD - Eversense account password
  */
 
-const DMS_BASE = "https://apiservice.eversensedms.com";
+const DMS_BASE = "https://us.eversensedms.com";
 const DMS_TOKEN_URL = `${DMS_BASE}/token`;
 const DMS_PROFILE_URL = `${DMS_BASE}/api/care/GetUserProfile`;
 const DMS_CURRENT_URL = `${DMS_BASE}/api/care/GetCurrentValues`;
