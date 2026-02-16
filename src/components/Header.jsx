@@ -49,7 +49,7 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
     const secsAgo = Math.round((Date.now() - new Date(lastSyncResult.time).getTime()) / 1000);
     if (secsAgo > 120) return null; // Hide after 2 minutes
     if (lastSyncResult.error) {
-      const msg = lastSyncResult.error.length > 80 ? lastSyncResult.error.slice(0, 80) + '...' : lastSyncResult.error;
+      const msg = lastSyncResult.error.length > 200 ? lastSyncResult.error.slice(0, 200) + '...' : lastSyncResult.error;
       return { text: `Sync error: ${msg}`, ok: false };
     }
     if (lastSyncResult.imported > 0) return { text: `+${lastSyncResult.imported} new readings`, ok: true };

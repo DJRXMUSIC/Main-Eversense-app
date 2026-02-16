@@ -9,15 +9,15 @@ import { getStore } from "@netlify/blobs";
  * GET /api/dms-trigger?key=<API_KEY>&action=status → config check only
  */
 
-// Try multiple candidate API base URLs — the old apiservice.eversensedms.com
-// was retired in the Ascensia→Senseonics transition (Jan 2026).
-const DMS_CANDIDATES = [
-  "https://usapi.eversensedms.com",
-  "https://usapiservice.eversensedms.com",
-  "https://api.eversensedms.com",
+// Known DMS domains — only those that actually resolve in DNS.
+// The old apiservice.eversensedms.com was retired Jan 2026.
+const DMS_HOSTS = [
   "https://us.eversensedms.com",
   "https://global.eversensedms.com",
 ];
+
+// Multiple auth paths to try — the server may have moved OAuth to a new route
+const AUTH_PATHS = ["/token", "/api/token", "/connect/token", "/oauth/token", "/api/v1/token"];
 
 const CLIENT_ID = "eversenseMMAAndroid";
 const CLIENT_SECRET = "6ksPx#]~wQ3U";
@@ -50,36 +50,64 @@ function fmtDate(d) {
 }
 
 async function authenticate(email, password) {
-  const body = new URLSearchParams({
+  // Strategy 1: OAuth2 form-encoded (original DMS format)
+  const oauthBody = new URLSearchParams({
     grant_type: "password", client_id: CLIENT_ID,
     client_secret: CLIENT_SECRET, username: email, password: password,
-  });
-  const bodyStr = body.toString();
+  }).toString();
 
-  // Try each candidate API base URL — return the first that works
+  // Strategy 2: JSON login (newer APIs often use this)
+  const jsonBody = JSON.stringify({ email, password, username: email });
+
   const errors = [];
-  for (const base of DMS_CANDIDATES) {
-    try {
-      const r = await fetch(`${base}/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: bodyStr,
-      });
-      if (r.ok) {
-        const data = await r.json();
-        return {
-          accessToken: data.access_token,
-          expiresAt: Date.now() + data.expires_in * 1000,
-          dmsBase: base, // remember which base worked
-        };
+
+  for (const host of DMS_HOSTS) {
+    // Try each auth path with form-encoded OAuth
+    for (const path of AUTH_PATHS) {
+      try {
+        const r = await fetch(`${host}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: oauthBody,
+        });
+        if (r.ok) {
+          const data = await r.json();
+          return {
+            accessToken: data.access_token || data.token || data.accessToken,
+            expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+            dmsBase: host,
+          };
+        }
+        errors.push(`${host}${path}[form]:${r.status}`);
+      } catch (err) {
+        errors.push(`${host}${path}[form]:dns/net`);
       }
-      const text = await r.text().catch(() => "");
-      errors.push(`${base}: ${r.status} ${text.slice(0, 60)}`);
-    } catch (err) {
-      errors.push(`${base}: ${err.message}`);
+    }
+
+    // Try JSON login on common paths
+    for (const path of ["/api/auth/login", "/api/account/login", "/api/v1/auth"]) {
+      try {
+        const r = await fetch(`${host}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: jsonBody,
+        });
+        if (r.ok) {
+          const data = await r.json();
+          return {
+            accessToken: data.access_token || data.token || data.accessToken,
+            expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+            dmsBase: host,
+          };
+        }
+        errors.push(`${host}${path}[json]:${r.status}`);
+      } catch (err) {
+        errors.push(`${host}${path}[json]:dns/net`);
+      }
     }
   }
-  throw new Error(`DMS auth failed on all endpoints: ${errors.join(" | ")}`);
+
+  throw new Error(`All auth attempts failed: ${errors.join(", ")}`);
 }
 
 function jsonResponse(data, status = 200) {
@@ -159,7 +187,7 @@ export default async function handler(event) {
       state.patientId = profiles[0]?.PatientId || profiles[0]?.PatientID || profiles[0]?.UserID;
     }
 
-    const base = state.dmsBase || DMS_CANDIDATES[0];
+    const base = state.dmsBase || DMS_HOSTS[0];
     const authHeaders = { Authorization: `Bearer ${state.accessToken}` };
     const now = new Date();
     const historyStart = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours
