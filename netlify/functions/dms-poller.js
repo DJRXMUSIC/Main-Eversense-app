@@ -14,12 +14,15 @@ import { getStore } from "@netlify/blobs";
  *   EVERSENSE_PASSWORD - Eversense account password
  */
 
-const DMS_BASE = "https://us.eversensedms.com";
-const DMS_TOKEN_URL = `${DMS_BASE}/token`;
-const DMS_PROFILE_URL = `${DMS_BASE}/api/care/GetUserProfile`;
-const DMS_CURRENT_URL = `${DMS_BASE}/api/care/GetCurrentValues`;
-const DMS_FOLLOWER_HISTORY_URL = `${DMS_BASE}/api/care/GetFollowingUserSensorGlucose`;
-const DMS_PATIENT_HISTORY_URL = `${DMS_BASE}/api/care/GetPatientGlucoseValues`;
+// Try multiple candidate API base URLs — the old apiservice.eversensedms.com
+// was retired in the Ascensia→Senseonics transition (Jan 2026).
+const DMS_CANDIDATES = [
+  "https://usapi.eversensedms.com",
+  "https://usapiservice.eversensedms.com",
+  "https://api.eversensedms.com",
+  "https://us.eversensedms.com",
+  "https://global.eversensedms.com",
+];
 
 const CLIENT_ID = "eversenseMMAAndroid";
 const CLIENT_SECRET = "6ksPx#]~wQ3U";
@@ -59,23 +62,32 @@ async function authenticate(email, password) {
     username: email,
     password: password,
   });
+  const bodyStr = body.toString();
 
-  const response = await fetch(DMS_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`DMS auth failed (${response.status}): ${text}`);
+  const errors = [];
+  for (const base of DMS_CANDIDATES) {
+    try {
+      const r = await fetch(`${base}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: bodyStr,
+      });
+      if (r.ok) {
+        const data = await r.json();
+        console.log(`DMS poller: authenticated via ${base}`);
+        return {
+          accessToken: data.access_token,
+          expiresAt: Date.now() + data.expires_in * 1000,
+          dmsBase: base,
+        };
+      }
+      const text = await r.text().catch(() => "");
+      errors.push(`${base}: ${r.status} ${text.slice(0, 60)}`);
+    } catch (err) {
+      errors.push(`${base}: ${err.message}`);
+    }
   }
-
-  const data = await response.json();
-  return {
-    accessToken: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
-  };
+  throw new Error(`DMS auth failed on all endpoints: ${errors.join(" | ")}`);
 }
 
 async function getPollerState(store) {
@@ -138,8 +150,9 @@ export default async function handler() {
       const auth = await authenticate(email, password);
       state.accessToken = auth.accessToken;
       state.expiresAt = auth.expiresAt;
+      state.dmsBase = auth.dmsBase;
 
-      const profileRes = await fetch(DMS_PROFILE_URL, {
+      const profileRes = await fetch(`${auth.dmsBase}/api/care/GetUserProfile`, {
         headers: { Authorization: `Bearer ${auth.accessToken}` },
       });
       if (!profileRes.ok) throw new Error(`Profile fetch failed: ${profileRes.status}`);
@@ -149,6 +162,7 @@ export default async function handler() {
       console.log(`DMS poller: authenticated, userId=${state.userId}`);
     }
 
+    const base = state.dmsBase || DMS_CANDIDATES[0];
     const authHeaders = { Authorization: `Bearer ${state.accessToken}` };
     const now = new Date();
     const historyStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -156,7 +170,7 @@ export default async function handler() {
     // Fetch all endpoints in parallel
     const [currentReadings, followerReadings, patientReadings] = await Promise.all([
       // Current value
-      fetch(`${DMS_CURRENT_URL}?FollowerUserID=${state.userId}`, { headers: authHeaders })
+      fetch(`${base}/api/care/GetCurrentValues?FollowerUserID=${state.userId}`, { headers: authHeaders })
         .then(async (r) => {
           if (!r.ok) return [];
           const data = await r.json();
@@ -173,7 +187,7 @@ export default async function handler() {
 
       // Follower history
       fetch(
-        `${DMS_FOLLOWER_HISTORY_URL}?UserID=${state.userId}&startDate=${fmtDate(historyStart)}&endDate=${fmtDate(now)}`,
+        `${base}/api/care/GetFollowingUserSensorGlucose?UserID=${state.userId}&startDate=${fmtDate(historyStart)}&endDate=${fmtDate(now)}`,
         { headers: authHeaders }
       )
         .then(async (r) => {
@@ -192,7 +206,7 @@ export default async function handler() {
 
       // Patient history
       fetch(
-        `${DMS_PATIENT_HISTORY_URL}?patientId=${state.patientId}&startDate=${fmtDate(historyStart)}&endDate=${fmtDate(now)}`,
+        `${base}/api/care/GetPatientGlucoseValues?patientId=${state.patientId}&startDate=${fmtDate(historyStart)}&endDate=${fmtDate(now)}`,
         { headers: authHeaders }
       )
         .then(async (r) => {
