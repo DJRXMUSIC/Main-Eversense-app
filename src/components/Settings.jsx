@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { THEMES } from '../lib/themes';
-import { checkDMSStatus } from '../lib/sync';
 import { checkNightscoutStatus } from '../lib/nightscout';
 
 const DATA_SOURCES = [
   { id: 'health-export', name: 'Health Auto Export', desc: 'iPhone → Health Auto Export app' },
-  { id: 'eversense-dms', name: 'Eversense DMS', desc: 'Direct cloud polling — no extra device needed' },
   { id: 'nightscout-local', name: 'ESEL / Nightscout', desc: 'ESEL → xDrip+ → NSClient → this server' },
   { id: 'nightscout', name: 'External Nightscout', desc: 'Fetch from a Nightscout instance URL' },
   { id: 'xdrip', name: 'xDrip+ Web Service', desc: 'Fetch from xDrip+ local web server' },
@@ -23,18 +21,8 @@ const APP_ICONS = [
 export default function Settings({ settings, onUpdateSetting, onExport, onClearAll, onClose, dataCounts }) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [nsUrlInput, setNsUrlInput] = useState(settings.nightscoutUrl || '');
-  const [dmsStatus, setDmsStatus] = useState(null);
-  const [dmsChecking, setDmsChecking] = useState(false);
   const [nsStatus, setNsStatus] = useState(null);
   const [nsChecking, setNsChecking] = useState(false);
-
-  // Check DMS status when that source is selected
-  useEffect(() => {
-    if (settings.dataSource === 'eversense-dms') {
-      setDmsChecking(true);
-      checkDMSStatus().then(s => { setDmsStatus(s); setDmsChecking(false); });
-    }
-  }, [settings.dataSource]);
 
   const SettingRow = ({ label, settingKey, min, max, step = 1, unit, displayTransform }) => {
     const value = settings[settingKey];
@@ -153,33 +141,6 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
                 </span><br />
                 Use your API key as the <span className="text-accent">api-secret</span> header.
               </div>
-            </div>
-          )}
-
-          {settings.dataSource === 'eversense-dms' && (
-            <div className="mt-2 px-3 py-2 bg-bg-tertiary/50 rounded-lg space-y-2">
-              <div className="text-[10px] text-text-secondary leading-relaxed">
-                Polls Eversense DMS cloud every 5 minutes. Set <span className="text-accent">EVERSENSE_EMAIL</span> and <span className="text-accent">EVERSENSE_PASSWORD</span> in Netlify env vars.
-              </div>
-              {dmsChecking ? (
-                <div className="text-[10px] text-text-secondary">Checking DMS connection...</div>
-              ) : dmsStatus ? (
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${dmsStatus.configured ? 'bg-green-500' : 'bg-red-500'}`} />
-                  <span className="text-[10px] text-text-secondary">
-                    {dmsStatus.configured
-                      ? `Connected${dmsStatus.userId ? ` (User: ${dmsStatus.userId})` : ''}`
-                      : dmsStatus.error || 'Not configured'}
-                  </span>
-                </div>
-              ) : null}
-              <button
-                onClick={() => {
-                  setDmsChecking(true);
-                  checkDMSStatus().then(s => { setDmsStatus(s); setDmsChecking(false); });
-                }}
-                className="text-[10px] text-accent font-medium active:opacity-80"
-              >Test Connection</button>
             </div>
           )}
 

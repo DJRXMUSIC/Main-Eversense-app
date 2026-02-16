@@ -4,7 +4,6 @@ import { fetchNightscoutReadings } from './nightscout';
 const API_PATH = '/api/glucose';
 const NS_API_PATH = '/api/v1/entries/sgv.json';
 const WIDGET_PATH = '/api/widget';
-const DMS_TRIGGER_PATH = '/api/dms-trigger';
 
 function getApiKey() {
   return import.meta.env.VITE_SYNC_API_KEY;
@@ -16,10 +15,6 @@ function getApiKey() {
 export async function syncGlucoseReadings(dataSource = 'health-export', nightscoutUrl = null) {
   const apiKey = getApiKey();
 
-  if (dataSource === 'eversense-dms') {
-    return syncFromDMS(apiKey);
-  }
-
   if ((dataSource === 'nightscout' || dataSource === 'xdrip') && nightscoutUrl) {
     return syncFromExternalNightscout(nightscoutUrl, apiKey);
   }
@@ -29,94 +24,6 @@ export async function syncGlucoseReadings(dataSource = 'health-export', nightsco
   }
 
   return syncFromHealthExport(apiKey);
-}
-
-/**
- * DMS sync — single round-trip.  The trigger returns readings directly
- * so we don't need a second fetch from /api/glucose.
- *
- * Falls back to /api/glucose if the trigger doesn't return readings
- * (e.g. older server version still deployed).
- */
-async function syncFromDMS(apiKey) {
-  if (!apiKey) return { imported: 0, skipped: 0, error: 'No API key configured' };
-
-  let triggerData = null;
-
-  // Step 1: Trigger DMS poll — the response now includes readings[]
-  let triggerError = null;
-  try {
-    const triggerUrl = new URL(DMS_TRIGGER_PATH, window.location.origin);
-    triggerUrl.searchParams.set('key', apiKey);
-    triggerUrl.searchParams.set('action', 'poll');
-    const triggerRes = await fetch(triggerUrl);
-
-    if (!triggerRes.ok) {
-      const errBody = await triggerRes.text().catch(() => '');
-      triggerError = `DMS HTTP ${triggerRes.status}`;
-      try {
-        const errJson = JSON.parse(errBody);
-        if (errJson.error) triggerError = errJson.error;
-        if (errJson.debug) triggerError += ` [${errJson.debug.join(', ')}]`;
-      } catch {}
-      console.warn('DMS trigger error:', triggerError);
-    } else {
-      triggerData = await triggerRes.json();
-      console.log('DMS trigger result:', triggerData);
-      if (!triggerData.success && triggerData.error) {
-        triggerError = triggerData.error;
-      }
-    }
-  } catch (err) {
-    triggerError = `Network error: ${err.message}`;
-    console.warn('DMS trigger network error:', err.message);
-  }
-
-  // Step 2: If the trigger returned readings directly, use them
-  if (triggerData?.readings && triggerData.readings.length > 0) {
-    const result = await addGlucoseReadings(triggerData.readings);
-    return {
-      imported: result.added,
-      skipped: result.skipped,
-      fetched: triggerData.fetched || 0,
-      debug: triggerData.debug,
-    };
-  }
-
-  // Step 3: Fallback — fetch from blob store
-  const blobResult = await syncFromBlobStore(apiKey);
-
-  // If both trigger and blob returned nothing, surface the trigger error
-  if (blobResult.imported === 0 && triggerError) {
-    return { ...blobResult, error: triggerError, debug: triggerData?.debug };
-  }
-  // If trigger fetched 0 readings but no error, note it
-  if (blobResult.imported === 0 && triggerData && triggerData.fetched === 0) {
-    return { ...blobResult, debug: triggerData.debug || ['DMS returned 0 readings'] };
-  }
-  return blobResult;
-}
-
-/**
- * Fetch readings from the blob store via /api/glucose.
- * For DMS, don't send `since` — always fetch the last 6 hours to avoid
- * missing data due to timestamp mismatches.
- */
-async function syncFromBlobStore(apiKey) {
-  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-
-  const url = new URL(API_PATH, window.location.origin);
-  url.searchParams.set('key', apiKey);
-  url.searchParams.set('since', sixHoursAgo);
-
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Glucose fetch failed: ${response.status}`);
-
-  const { readings } = await response.json();
-  if (!readings || readings.length === 0) return { imported: 0, skipped: 0 };
-
-  const result = await addGlucoseReadings(readings);
-  return { imported: result.added, skipped: result.skipped };
 }
 
 async function syncFromHealthExport(apiKey) {
@@ -205,25 +112,6 @@ async function syncFromExternalNightscout(baseUrl, apiKey) {
 
   const result = await addGlucoseReadings(readings);
   return { imported: result.added, skipped: result.skipped };
-}
-
-/**
- * Check DMS poller status on the server.
- */
-export async function checkDMSStatus() {
-  const apiKey = getApiKey();
-  if (!apiKey) return { configured: false };
-
-  try {
-    const url = new URL(DMS_TRIGGER_PATH, window.location.origin);
-    url.searchParams.set('key', apiKey);
-    url.searchParams.set('action', 'status');
-    const res = await fetch(url);
-    if (!res.ok) return { configured: false, error: `HTTP ${res.status}` };
-    return await res.json();
-  } catch (err) {
-    return { configured: false, error: err.message };
-  }
 }
 
 export async function pushWidgetData({ iob, glucoseData, todayBasal }) {

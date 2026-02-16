@@ -115,7 +115,7 @@ export function useAppData() {
   // Also re-sync when the tab regains focus (covers phone lock/unlock)
   useEffect(() => {
     clearInterval(syncInterval.current);
-    const realTimeSources = ['eversense-dms', 'nightscout', 'nightscout-local', 'xdrip'];
+    const realTimeSources = ['nightscout', 'nightscout-local', 'xdrip'];
     const isRealTime = settings && realTimeSources.includes(settings.dataSource);
 
     if (isRealTime) {
