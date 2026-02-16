@@ -9,18 +9,22 @@ import { getStore } from "@netlify/blobs";
  * GET /api/dms-trigger?key=<API_KEY>&action=status → config check only
  */
 
-// Known DMS domains — only those that actually resolve in DNS.
-// The old apiservice.eversensedms.com was retired Jan 2026.
+// Known DMS domains and auth paths.
+// /connect/token = IdentityServer4 (Duende) — the standard .NET OAuth server.
+// /token and /oauth/token also return 405 — likely aliases.
 const DMS_HOSTS = [
   "https://us.eversensedms.com",
   "https://global.eversensedms.com",
 ];
 
-// Multiple auth paths to try — the server may have moved OAuth to a new route
-const AUTH_PATHS = ["/token", "/api/token", "/connect/token", "/oauth/token", "/api/v1/token"];
-
-const CLIENT_ID = "eversenseMMAAndroid";
-const CLIENT_SECRET = "6ksPx#]~wQ3U";
+// Client IDs to try — the old Android app creds may have been revoked,
+// the Eversense 365 app likely uses new ones.
+const CLIENT_CREDS = [
+  { id: "eversenseMMAAndroid", secret: "6ksPx#]~wQ3U" },
+  { id: "eversense365", secret: "" },
+  { id: "eversense_mobile", secret: "" },
+  { id: "EversenseDMS", secret: "" },
+];
 
 const STORE_NAME = "glucose-data";
 const READINGS_KEY = "readings";
@@ -50,64 +54,91 @@ function fmtDate(d) {
 }
 
 async function authenticate(email, password) {
-  // Strategy 1: OAuth2 form-encoded (original DMS format)
-  const oauthBody = new URLSearchParams({
-    grant_type: "password", client_id: CLIENT_ID,
-    client_secret: CLIENT_SECRET, username: email, password: password,
-  }).toString();
-
-  // Strategy 2: JSON login (newer APIs often use this)
-  const jsonBody = JSON.stringify({ email, password, username: email });
-
   const errors = [];
 
+  // The 405 paths (/token, /connect/token, /oauth/token) exist but reject our POST.
+  // Try multiple strategies: different client creds, Origin header, scope param, JSON body.
+  const authPaths = ["/connect/token", "/token", "/oauth/token"];
+
   for (const host of DMS_HOSTS) {
-    // Try each auth path with form-encoded OAuth
-    for (const path of AUTH_PATHS) {
-      try {
-        const r = await fetch(`${host}${path}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: oauthBody,
-        });
-        if (r.ok) {
-          const data = await r.json();
-          return {
-            accessToken: data.access_token || data.token || data.accessToken,
-            expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
-            dmsBase: host,
+    for (const cred of CLIENT_CREDS) {
+      for (const path of authPaths) {
+        // Form-encoded OAuth2 with Origin header and scope
+        try {
+          const params = {
+            grant_type: "password",
+            client_id: cred.id,
+            username: email,
+            password: password,
           };
+          if (cred.secret) params.client_secret = cred.secret;
+          // IdentityServer4 often requires scope
+          params.scope = "openid profile offline_access";
+
+          const r = await fetch(`${host}${path}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Origin": host,
+              "Accept": "application/json",
+            },
+            body: new URLSearchParams(params).toString(),
+          });
+          const txt = await r.text();
+          if (r.ok) {
+            const data = JSON.parse(txt);
+            return {
+              accessToken: data.access_token || data.token || data.accessToken,
+              expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+              dmsBase: host,
+            };
+          }
+          // Strip HTML, keep short excerpt for diagnostics
+          const excerpt = txt.replace(/<[^>]*>/g, "").trim().slice(0, 40);
+          errors.push(`${path}[${cred.id}]:${r.status}${excerpt ? " " + excerpt : ""}`);
+        } catch {
+          errors.push(`${path}[${cred.id}]:net`);
         }
-        errors.push(`${host}${path}[form]:${r.status}`);
-      } catch (err) {
-        errors.push(`${host}${path}[form]:dns/net`);
       }
     }
 
-    // Try JSON login on common paths
-    for (const path of ["/api/auth/login", "/api/account/login", "/api/v1/auth"]) {
+    // Also try JSON body on /connect/token (some IdentityServer configs accept it)
+    for (const path of ["/connect/token", "/api/auth/login", "/api/account/login"]) {
       try {
         const r = await fetch(`${host}${path}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: jsonBody,
+          headers: {
+            "Content-Type": "application/json",
+            "Origin": host,
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({
+            grant_type: "password",
+            client_id: CLIENT_CREDS[0].id,
+            client_secret: CLIENT_CREDS[0].secret,
+            username: email,
+            password: password,
+            email: email,
+          }),
         });
+        const txt = await r.text();
         if (r.ok) {
-          const data = await r.json();
+          const data = JSON.parse(txt);
           return {
             accessToken: data.access_token || data.token || data.accessToken,
             expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
             dmsBase: host,
           };
         }
-        errors.push(`${host}${path}[json]:${r.status}`);
-      } catch (err) {
-        errors.push(`${host}${path}[json]:dns/net`);
+        const excerpt = txt.replace(/<[^>]*>/g, "").trim().slice(0, 40);
+        errors.push(`${path}[json]:${r.status}${excerpt ? " " + excerpt : ""}`);
+      } catch {
+        errors.push(`${path}[json]:net`);
       }
     }
   }
 
-  throw new Error(`All auth attempts failed: ${errors.join(", ")}`);
+  throw new Error(`Auth failed: ${errors.join(", ")}`);
 }
 
 function jsonResponse(data, status = 200) {
@@ -116,9 +147,12 @@ function jsonResponse(data, status = 200) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     },
   });
 }
+
+export const config = { path: "/api/dms-trigger" };
 
 export default async function handler(event) {
   if (event.method === "OPTIONS") {
@@ -126,26 +160,24 @@ export default async function handler(event) {
       status: 204,
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, x-api-key",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
       },
     });
   }
 
-  const url = new URL(event.url);
-  const key = url.searchParams.get("key") || event.headers.get("x-api-key");
-  if (!key || key !== process.env.SYNC_API_KEY) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
-  }
-
   const email = process.env.EVERSENSE_EMAIL;
   const password = process.env.EVERSENSE_PASSWORD;
+  const syncKey = process.env.SYNC_API_KEY;
+  const url = new URL(event.url);
+  const key = url.searchParams.get("key");
 
   if (!email || !password) {
-    return jsonResponse({
-      configured: false,
-      error: "EVERSENSE_EMAIL or EVERSENSE_PASSWORD not set on server",
-    });
+    return jsonResponse({ success: false, configured: false, error: "EVERSENSE_EMAIL/PASSWORD not set" }, 200);
+  }
+
+  if (!syncKey || key !== syncKey) {
+    return jsonResponse({ success: false, error: "Unauthorized" }, 403);
   }
 
   const store = getStore(STORE_NAME);
@@ -261,37 +293,32 @@ export default async function handler(event) {
     const results = await Promise.all(fetches);
     const allReadings = results.flat();
 
-    // Dedup by timestamp
-    const seen = new Set();
-    const unique = allReadings.filter((r) => {
-      if (seen.has(r.timestamp)) return false;
-      seen.add(r.timestamp);
-      return true;
-    });
-    unique.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-
+    // Deduplicate by timestamp
+    const seen = new Map();
+    for (const r of allReadings) {
+      if (!seen.has(r.timestamp)) seen.set(r.timestamp, r);
+    }
+    const unique = [...seen.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     debug.push(`unique: ${unique.length}`);
     if (unique.length === 0) {
       debug.push("no readings from any endpoint");
     }
 
-    // Build full reading objects for both storage and direct return
-    const fullReadings = unique.map((r) => ({
-      id: crypto.randomUUID(),
-      timestamp: r.timestamp,
-      date: r.timestamp.split("T")[0],
-      value: r.value,
-      source: "eversense-dms",
-      direction: r.direction,
-    }));
-
-    // Store in blob (merge with existing)
-    const existing = (await store.get(READINGS_KEY, { type: "json" }).catch(() => null)) || [];
+    // Persist to blob store for the background poller / widget fallback
+    const blobData = await store.get(READINGS_KEY, { type: "json" }).catch(() => null);
+    const existing = Array.isArray(blobData) ? blobData : [];
     const existingKeys = new Set(existing.map((r) => r.timestamp));
     let imported = 0;
-    for (const r of fullReadings) {
+    for (const r of unique) {
       if (!existingKeys.has(r.timestamp)) {
-        existing.push(r);
+        existing.push({
+          id: crypto.randomUUID(),
+          timestamp: r.timestamp,
+          date: r.timestamp.split("T")[0],
+          value: r.value,
+          source: "eversense-dms",
+          direction: r.direction || null,
+        });
         existingKeys.add(r.timestamp);
         imported++;
       }
@@ -300,31 +327,29 @@ export default async function handler(event) {
     const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
     const filtered = existing.filter((r) => r.timestamp > cutoff);
     await store.setJSON(READINGS_KEY, filtered);
+
+    // Save state (token, userId, etc.)
     await store.setJSON(DMS_STATE_KEY, state);
 
     return jsonResponse({
       success: true,
-      configured: true,
       fetched: unique.length,
       imported,
       total: filtered.length,
-      latest: unique.length > 0 ? unique[unique.length - 1] : null,
-      readings: fullReadings, // Return readings directly so frontend can use them
+      latest: unique.length > 0 ? unique[unique.length - 1].timestamp : null,
+      readings: unique,
       debug,
     });
   } catch (err) {
     debug.push(`fatal: ${err.message}`);
+
     // Clear token on auth failure
     try {
       const state = (await store.get(DMS_STATE_KEY, { type: "json" }).catch(() => null)) || {};
       state.accessToken = null;
-      state.expiresAt = null;
       await store.setJSON(DMS_STATE_KEY, state);
     } catch {}
+
     return jsonResponse({ success: false, configured: true, error: err.message, debug }, 500);
   }
 }
-
-export const config = {
-  path: "/api/dms-trigger",
-};
