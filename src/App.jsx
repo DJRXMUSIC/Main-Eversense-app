@@ -1,12 +1,12 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAppData } from './hooks/useAppData';
 import Header from './components/Header';
-import GlucoseChart from './components/GlucoseChart';
 import History from './components/History';
 import Stats from './components/Stats';
 import { getAllGlucoseReadings, getAllBolusDoses, getAllBasalDoses } from './lib/db';
 
-// Lazy-load modals for faster initial render
+// Lazy-load chart and modals for faster initial render (IOB + bolus buttons load first)
+const GlucoseChart = lazy(() => import('./components/GlucoseChart'));
 const BolusModal = lazy(() => import('./components/BolusModal'));
 const BasalModal = lazy(() => import('./components/BasalModal'));
 const ImportModal = lazy(() => import('./components/ImportModal'));
@@ -95,14 +95,7 @@ function App() {
         settings={settings}
       />
 
-      <GlucoseChart
-        glucoseData={glucoseData}
-        bolusDoses={bolusDoses}
-        settings={settings}
-        themeId={themeId}
-      />
-
-      {/* Quick actions */}
+      {/* Quick actions — first thing after header for fast insulin logging */}
       <div className="px-4 py-2 space-y-2">
         <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Quick Bolus</div>
         <div className="grid grid-cols-5 gap-2">
@@ -137,6 +130,15 @@ function App() {
           </button>
         </div>
       </div>
+
+      <Suspense fallback={<div className="h-[300px]" />}>
+        <GlucoseChart
+          glucoseData={glucoseData}
+          bolusDoses={bolusDoses}
+          settings={settings}
+          themeId={themeId}
+        />
+      </Suspense>
 
       <History
         bolusDoses={bolusDoses}

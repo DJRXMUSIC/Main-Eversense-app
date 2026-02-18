@@ -14,6 +14,7 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
       all.push({
         id: dose.id,
         type: 'bolus',
+        dateKey: dose.date,
         time: new Date(dose.timestamp),
         units: dose.units,
         label: `${dose.units}u Humalog`,
@@ -25,6 +26,7 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
       all.push({
         id: dose.id,
         type: 'basal',
+        dateKey: dose.date,
         time: new Date(dose.date + 'T12:00:00'),
         units: dose.units,
         label: `${dose.units}u Toujeo`,
@@ -32,8 +34,14 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
       });
     }
 
-    // Sort newest first
-    all.sort((a, b) => b.time - a.time);
+    // Sort newest first, but always put basal at the bottom of its day group
+    all.sort((a, b) => {
+      if (a.dateKey !== b.dateKey) return b.dateKey.localeCompare(a.dateKey);
+      // Within the same day: basal always last
+      if (a.type === 'basal' && b.type !== 'basal') return 1;
+      if (b.type === 'basal' && a.type !== 'basal') return -1;
+      return b.time - a.time;
+    });
     return all;
   }, [bolusDoses, basalDoses]);
 
