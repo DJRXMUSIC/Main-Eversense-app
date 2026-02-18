@@ -36,10 +36,11 @@ export function useAppData() {
   const hasSynced = useRef(false);
   const syncingRef = useRef(false);
 
-  const today = new Date().toISOString().split('T')[0];
-
   const loadData = useCallback(async () => {
     try {
+      // Compute today fresh every call — avoids stale date after midnight
+      const today = new Date().toISOString().split('T')[0];
+
       const s = await getSettings();
       setSettingsState(s);
 
@@ -71,7 +72,7 @@ export function useAppData() {
       console.error('Failed to load data:', err);
       setLoading(false);
     }
-  }, [today]);
+  }, []);
 
   // Sync using the configured data source
   const doSync = useCallback(async () => {
@@ -111,8 +112,6 @@ export function useAppData() {
   }, [loading, doSync, settings]);
 
   // Auto-refresh polling for real-time data sources (every 30s)
-  // Use syncingRef (not syncing state) to avoid resetting the timer on every sync
-  // Also re-sync when the tab regains focus (covers phone lock/unlock)
   useEffect(() => {
     clearInterval(syncInterval.current);
     const realTimeSources = ['nightscout', 'nightscout-local', 'xdrip'];
@@ -124,19 +123,21 @@ export function useAppData() {
       }, 30000);
     }
 
-    // Re-sync when tab becomes visible again (phone wake, tab switch)
+    return () => clearInterval(syncInterval.current);
+  }, [settings?.dataSource, doSync]);
+
+  // Always reload data when the app resumes from background.
+  // iOS/Android may evict the webview — when restored, React state is
+  // stale or empty. This ensures IOB + doses are fresh on every resume.
+  useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && isRealTime && !syncingRef.current) {
-        doSync();
+      if (document.visibilityState === 'visible') {
+        loadData();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      clearInterval(syncInterval.current);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [settings?.dataSource, doSync]);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [loadData]);
 
   // Update IOB every minute — only filter recent doses for performance
   useEffect(() => {
@@ -182,14 +183,14 @@ export function useAppData() {
   const logBasal = useCallback(async (units, date) => {
     const dose = {
       id: crypto.randomUUID(),
-      date: date || today,
+      date: date || new Date().toISOString().split('T')[0],
       units,
       type: 'basal',
       insulinType: 'toujeo',
     };
     await addBasalDose(dose);
     await loadData();
-  }, [today, loadData]);
+  }, [loadData]);
 
   const importGlucose = useCallback(async (readings) => {
     const result = await addGlucoseReadings(readings);

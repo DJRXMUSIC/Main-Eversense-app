@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, Component } from 'react';
 import { useAppData } from './hooks/useAppData';
 import Header from './components/Header';
 import History from './components/History';
@@ -6,11 +6,47 @@ import Stats from './components/Stats';
 import { getAllGlucoseReadings, getAllBolusDoses, getAllBasalDoses } from './lib/db';
 
 // Lazy-load chart and modals for faster initial render (IOB + bolus buttons load first)
-const GlucoseChart = lazy(() => import('./components/GlucoseChart'));
-const BolusModal = lazy(() => import('./components/BolusModal'));
-const BasalModal = lazy(() => import('./components/BasalModal'));
-const ImportModal = lazy(() => import('./components/ImportModal'));
-const Settings = lazy(() => import('./components/Settings'));
+// Retry wrapper: if chunk fails (stale SW cache), bust cache and retry once
+function lazyRetry(importFn) {
+  return lazy(() =>
+    importFn().catch(() => {
+      // Chunk load failed — likely stale service worker cache. Force reload.
+      window.location.reload();
+      return new Promise(() => {}); // never resolves, page is reloading
+    })
+  );
+}
+
+const GlucoseChart = lazyRetry(() => import('./components/GlucoseChart'));
+const BolusModal = lazyRetry(() => import('./components/BolusModal'));
+const BasalModal = lazyRetry(() => import('./components/BasalModal'));
+const ImportModal = lazyRetry(() => import('./components/ImportModal'));
+const Settings = lazyRetry(() => import('./components/Settings'));
+
+// Error boundary: catches render errors from stale chunks or hydration failures
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {
+    // Force full reload to get fresh assets
+    setTimeout(() => window.location.reload(), 100);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+          <div className="text-text-secondary text-sm">Reloading...</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const {
@@ -177,4 +213,10 @@ function App() {
   );
 }
 
-export default App;
+export default function WrappedApp() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
