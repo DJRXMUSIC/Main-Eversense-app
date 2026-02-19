@@ -58,7 +58,18 @@ export function useAppData() {
       const glucose = await getGlucoseReadings(windowStart.toISOString(), now.toISOString());
       setGlucoseData(glucose);
 
-      const allBolus = await getAllBolusDoses();
+      // Recompute date from timestamp using local timezone.
+      // Fixes old doses that were stored with UTC dates.
+      const rawBolus = await getAllBolusDoses();
+      const allBolus = [];
+      for (const d of rawBolus) {
+        const correctDate = d.timestamp ? localDate(new Date(d.timestamp)) : d.date;
+        if (correctDate !== d.date) {
+          // Persist the fix so it doesn't need recomputing next time
+          await updateBolusDose(d.id, { date: correctDate });
+        }
+        allBolus.push({ ...d, date: correctDate });
+      }
       setBolusDoses(allBolus);
 
       const basal = await getBasalDoses(7);
