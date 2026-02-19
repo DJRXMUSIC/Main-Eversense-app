@@ -21,6 +21,12 @@ import { calcTotalIOB } from '../lib/iob';
 import { syncGlucoseReadings, pushWidgetData } from '../lib/sync';
 import { applyTheme } from '../lib/themes';
 
+// Local calendar date as YYYY-MM-DD (Eastern/device timezone, not UTC)
+function localDate(d = new Date()) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
 export function useAppData() {
   const [glucoseData, setGlucoseData] = useState([]);
   const [bolusDoses, setBolusDoses] = useState([]);
@@ -39,7 +45,7 @@ export function useAppData() {
   const loadData = useCallback(async () => {
     try {
       // Compute today fresh every call — avoids stale date after midnight
-      const today = new Date().toISOString().split('T')[0];
+      const today = localDate();
 
       const s = await getSettings();
       setSettingsState(s);
@@ -168,10 +174,11 @@ export function useAppData() {
   }, []);
 
   const logBolus = useCallback(async (units, timestamp) => {
+    const doseTime = timestamp ? new Date(timestamp) : new Date();
     const dose = {
       id: crypto.randomUUID(),
       timestamp: timestamp || new Date().toISOString(),
-      date: (timestamp ? new Date(timestamp) : new Date()).toISOString().split('T')[0],
+      date: localDate(doseTime),
       units: Math.round(units),
       type: 'bolus',
       insulinType: 'humalog',
@@ -183,7 +190,7 @@ export function useAppData() {
   const logBasal = useCallback(async (units, date) => {
     const dose = {
       id: crypto.randomUUID(),
-      date: date || new Date().toISOString().split('T')[0],
+      date: date || localDate(),
       units,
       type: 'basal',
       insulinType: 'toujeo',
@@ -225,7 +232,7 @@ export function useAppData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `supercharged-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `supercharged-backup-${localDate()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }, []);

@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
 
+function localDate(d = new Date()) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
 export default function Stats({ bolusDoses, basalDoses }) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDate();
 
   // Today's bolus since midnight (00:00)
   const todayBolusDoses = useMemo(() => {
@@ -36,7 +41,7 @@ export default function Stats({ bolusDoses, basalDoses }) {
     for (let i = 1; i <= 7; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      days.push(d.toISOString().split('T')[0]);
+      days.push(localDate(d));
     }
     let total = 0;
     let daysWithData = 0;
@@ -96,7 +101,7 @@ export default function Stats({ bolusDoses, basalDoses }) {
         for (let i = 1; i <= 7; i++) {
           const d = new Date();
           d.setDate(d.getDate() - i);
-          days.push(d.toISOString().split('T')[0]);
+          days.push(localDate(d));
         }
         let total = 0;
         let count = 0;

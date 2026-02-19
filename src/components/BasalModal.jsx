@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
 import { getBasalDoseForDate } from '../lib/db';
 
+function localDate(d = new Date()) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
 export default function BasalModal({ onClose, onSave, defaultUnits }) {
   const [units, setUnits] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => localDate());
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
@@ -37,16 +42,16 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
   for (let i = 0; i < 7; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+    dates.push(localDate(d));
   }
 
   const formatDateLabel = (dateStr) => {
     const d = new Date(dateStr + 'T12:00:00');
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDate();
     if (dateStr === today) return 'Today';
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
+    if (dateStr === localDate(yesterday)) return 'Yesterday';
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 

@@ -1,5 +1,10 @@
 import { useState, useMemo } from 'react';
 
+function localDate(d = new Date()) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
 export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteBolus, onEditBasal, onDeleteBasal }) {
   const [expanded, setExpanded] = useState(true);
   const [editingId, setEditingId] = useState(null);
@@ -45,23 +50,22 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
     return all;
   }, [bolusDoses, basalDoses]);
 
-  // Group events by date
+  // Group events by local date (using dateKey stored on each dose)
   const grouped = useMemo(() => {
     const groups = {};
     for (const event of events) {
-      const dateKey = event.time.toISOString().split('T')[0];
-      if (!groups[dateKey]) groups[dateKey] = [];
-      groups[dateKey].push(event);
+      if (!groups[event.dateKey]) groups[event.dateKey] = [];
+      groups[event.dateKey].push(event);
     }
     return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
   }, [events]);
 
   const formatDateHeader = (dateStr) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDate();
     if (dateStr === today) return 'Today';
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    if (dateStr === yesterday.toISOString().split('T')[0]) return 'Yesterday';
+    if (dateStr === localDate(yesterday)) return 'Yesterday';
     const d = new Date(dateStr + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
