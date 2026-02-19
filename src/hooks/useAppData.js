@@ -44,46 +44,42 @@ export function useAppData() {
 
   const loadData = useCallback(async () => {
     try {
-      // Compute today fresh every call — avoids stale date after midnight
       const today = localDate();
-
-      const s = await getSettings();
-      setSettingsState(s);
-
-      // Apply theme immediately on load
-      applyTheme(s.theme || 'fidelity');
-
       const now = new Date();
       const windowStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-      const glucose = await getGlucoseReadings(windowStart.toISOString(), now.toISOString());
+
+      // Parallel DB reads — all independent, no reason to wait sequentially
+      const [s, glucose, rawBolus, basal, todayB] = await Promise.all([
+        getSettings(),
+        getGlucoseReadings(windowStart.toISOString(), now.toISOString()),
+        getAllBolusDoses(),
+        getBasalDoses(7),
+        getBasalDoseForDate(today),
+      ]);
+
+      applyTheme(s.theme || 'fidelity');
+      setSettingsState(s);
       setGlucoseData(glucose);
-
-      // Recompute date from timestamp using local timezone.
-      // Fixes old doses that were stored with UTC dates.
-      const rawBolus = await getAllBolusDoses();
-      const allBolus = [];
-      for (const d of rawBolus) {
-        const correctDate = d.timestamp ? localDate(new Date(d.timestamp)) : d.date;
-        if (correctDate !== d.date) {
-          // Persist the fix so it doesn't need recomputing next time
-          await updateBolusDose(d.id, { date: correctDate });
-        }
-        allBolus.push({ ...d, date: correctDate });
-      }
-      setBolusDoses(allBolus);
-
-      const basal = await getBasalDoses(7);
       setBasalDoses(basal);
-
-      const todayB = await getBasalDoseForDate(today);
       setTodayBasal(todayB);
+
+      // Fix dates from UTC to local timezone in memory (instant)
+      const allBolus = rawBolus.map(d => {
+        const correctDate = d.timestamp ? localDate(new Date(d.timestamp)) : d.date;
+        return correctDate !== d.date ? { ...d, date: correctDate } : d;
+      });
+      setBolusDoses(allBolus);
 
       const iob = calcTotalIOB(allBolus, now, s.bolusDIA, s.bolusPeakTime);
       setCurrentIOB(iob);
 
       setLoading(false);
 
-      // Push widget snapshot (fire and forget)
+      // Non-critical work after render: persist date fixes + widget push
+      const toFix = allBolus.filter((d, i) => d !== rawBolus[i]);
+      if (toFix.length > 0) {
+        for (const d of toFix) updateBolusDose(d.id, { date: d.date });
+      }
       pushWidgetData({ iob, glucoseData: glucose, todayBasal: todayB });
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -115,9 +111,9 @@ export function useAppData() {
     }
   }, [loadData, settings]);
 
-  // Initial load
+  // Initial load — data first, cleanup deferred
   useEffect(() => {
-    cleanupOldData().then(loadData);
+    loadData().then(() => cleanupOldData());
   }, [loadData]);
 
   // Auto-sync once after initial load
