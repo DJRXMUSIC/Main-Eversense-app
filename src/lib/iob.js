@@ -133,6 +133,26 @@ export function getDoseIOBCurve(dose, startTime, endTime, intervalMinutes = 5) {
 }
 
 /**
+ * Insulin ACTIVITY curve for a single dose (bell-shaped: rises to peak, falls).
+ * Scaled so peak = dose.units (e.g. a 5u dose peaks at 5.0 on the y-axis).
+ * This shows the onset → peak → decline profile for chart visualization.
+ */
+export function getDoseActivityCurve(dose, startTime, endTime, intervalMinutes = 3) {
+  const points = [];
+  const doseTime = new Date(dose.timestamp).getTime();
+  const current = new Date(startTime);
+  while (current <= endTime) {
+    const minutesElapsed = (current.getTime() - doseTime) / (1000 * 60);
+    const activity = rawActivity(minutesElapsed);
+    if (activity > 0.005) {
+      points.push({ time: new Date(current), activity: activity * dose.units });
+    }
+    current.setMinutes(current.getMinutes() + intervalMinutes);
+  }
+  return points;
+}
+
+/**
  * Aggregated IOB curve (sum of all doses) over a time window.
  */
 export function getAggregatedIOBCurve(doses, startTime, endTime, intervalMinutes = 5) {

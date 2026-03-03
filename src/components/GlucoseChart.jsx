@@ -12,7 +12,7 @@ import {
   Legend,
 } from 'chart.js';
 import 'chartjs-adapter-date-fns';
-import { getAggregatedIOBCurve, getDoseIOBCurve, calcTotalIOB, HUMALOG_DIA } from '../lib/iob';
+import { getAggregatedIOBCurve, getDoseActivityCurve, calcTotalIOB, HUMALOG_DIA } from '../lib/iob';
 import { getThemeColors } from '../lib/themes';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, TimeScale, Legend);
@@ -67,17 +67,17 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
       .map(p => ({ x: p.time.getTime(), y: p.iob }));
   }, [activeDoses, windowStart, windowEnd]);
 
-  // Per-bolus IOB curves — each dose gets its own line showing rise/peak/fall
-  const perDoseIOBCurves = useMemo(() => {
+  // Per-bolus activity curves — bell-shaped: onset → peak → decline for each dose
+  const perDoseActivityCurves = useMemo(() => {
     if (activeDoses.length === 0) return [];
     const ws = new Date(windowStart);
     const we = new Date(windowEnd);
     return activeDoses.map(dose => {
-      const points = getDoseIOBCurve(dose, ws, we, 3);
+      const points = getDoseActivityCurve(dose, ws, we, 3);
       return {
         id: dose.id,
         units: dose.units,
-        data: points.map(p => ({ x: p.time.getTime(), y: p.iob })),
+        data: points.map(p => ({ x: p.time.getTime(), y: p.activity })),
       };
     }).filter(c => c.data.length > 0);
   }, [activeDoses, windowStart, windowEnd]);
@@ -113,18 +113,18 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
       spanGaps: false,
     });
 
-    // Per-bolus IOB curves — faded individual lines showing each dose's activity
-    perDoseIOBCurves.forEach((curve, i) => {
+    // Per-bolus activity curves — bell-shaped rise/peak/fall for each dose
+    perDoseActivityCurves.forEach((curve) => {
       ds.push({
         label: `Bolus ${curve.units}u`,
         data: curve.data,
-        borderColor: `rgba(${colors.accentRgb}, 0.35)`,
-        backgroundColor: 'transparent',
+        borderColor: `rgba(${colors.accentRgb}, 0.4)`,
+        backgroundColor: `rgba(${colors.accentRgb}, 0.08)`,
         borderWidth: 1.5,
-        borderDash: [4, 3],
+        borderDash: [5, 4],
         pointRadius: 0,
-        tension: 0.3,
-        fill: false,
+        tension: 0.4,
+        fill: true,
         yAxisID: 'yInsulin',
         order: 4,
       });
@@ -162,7 +162,7 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
     }
 
     return ds;
-  }, [glucosePoints, aggregatedIOB, perDoseIOBCurves, doseMarkers, ACCENT, GLUCOSE_COLOR, colors.accentRgb]);
+  }, [glucosePoints, aggregatedIOB, perDoseActivityCurves, doseMarkers, ACCENT, GLUCOSE_COLOR, colors.accentRgb]);
 
   const handleChartClick = useCallback((event) => {
     const chart = chartRef.current;
