@@ -17,7 +17,7 @@ import {
   exportAllData,
   clearAllData,
 } from '../lib/db';
-import { calcTotalIOB } from '../lib/iob';
+import { calcTotalIOB, HUMALOG_DIA } from '../lib/iob';
 import { syncGlucoseReadings, pushWidgetData } from '../lib/sync';
 import { applyTheme } from '../lib/themes';
 
@@ -70,7 +70,7 @@ export function useAppData() {
       });
       setBolusDoses(allBolus);
 
-      const iob = calcTotalIOB(allBolus, now, s.bolusDIA, s.bolusPeakTime);
+      const iob = calcTotalIOB(allBolus, now);
       setCurrentIOB(iob);
 
       setLoading(false);
@@ -155,19 +155,19 @@ export function useAppData() {
   // Update IOB every minute — only filter recent doses for performance
   useEffect(() => {
     iobInterval.current = setInterval(() => {
-      if (bolusDoses.length > 0 && settings) {
-        const diaMs = (settings.bolusDIA || 300) * 60 * 1000;
+      if (bolusDoses.length > 0) {
+        const diaMs = HUMALOG_DIA * 60 * 1000;
         const now = new Date();
         const recentDoses = bolusDoses.filter(d =>
           now.getTime() - new Date(d.timestamp).getTime() < diaMs
         );
-        const iob = calcTotalIOB(recentDoses, now, settings.bolusDIA, settings.bolusPeakTime);
+        const iob = calcTotalIOB(recentDoses, now);
         setCurrentIOB(iob);
       }
     }, 60000);
 
     return () => clearInterval(iobInterval.current);
-  }, [bolusDoses, settings]);
+  }, [bolusDoses]);
 
   // Apply theme when setting changes
   const updateSetting = useCallback(async (key, value) => {

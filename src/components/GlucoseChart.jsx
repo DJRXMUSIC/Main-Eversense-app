@@ -12,7 +12,7 @@ import {
   Legend,
 } from 'chart.js';
 import 'chartjs-adapter-date-fns';
-import { getAggregatedIOBCurve, calcTotalIOB } from '../lib/iob';
+import { getAggregatedIOBCurve, getDoseIOBCurve, calcTotalIOB, HUMALOG_DIA } from '../lib/iob';
 import { getThemeColors } from '../lib/themes';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, TimeScale, Legend);
@@ -20,6 +20,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, 
 const HOUR_MS = 60 * 60 * 1000;
 const PAST_HOURS = 5;
 const FUTURE_HOURS = 1;
+const DIA_MS = HUMALOG_DIA * 60 * 1000;
 
 function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
   const now = useMemo(() => Date.now(), []);
@@ -34,9 +35,7 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
   const windowEnd = now + (FUTURE_HOURS + offsetHours) * HOUR_MS;
   const windowStart = now + (offsetHours - PAST_HOURS) * HOUR_MS;
 
-  const { dia, peak, targetLow, targetHigh, displayLow, displayHigh } = useMemo(() => ({
-    dia: settings?.bolusDIA || 300,
-    peak: settings?.bolusPeakTime || 75,
+  const { targetLow, targetHigh, displayLow, displayHigh } = useMemo(() => ({
     targetLow: settings?.targetRangeLow || 70,
     targetHigh: settings?.targetRangeHigh || 160,
     displayLow: settings?.graphDisplayLow || 50,
@@ -44,12 +43,11 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
   }), [settings]);
 
   const activeDoses = useMemo(() => {
-    const diaMs = dia * 60 * 1000;
     return bolusDoses.filter(d => {
       const t = new Date(d.timestamp).getTime();
-      return t >= windowStart - diaMs && t <= windowEnd;
+      return t >= windowStart - DIA_MS && t <= windowEnd;
     });
-  }, [bolusDoses, windowStart, windowEnd, dia]);
+  }, [bolusDoses, windowStart, windowEnd]);
 
   const glucosePoints = useMemo(() => {
     return glucoseData
@@ -65,9 +63,24 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
     if (activeDoses.length === 0) return [];
     const ws = new Date(windowStart);
     const we = new Date(windowEnd);
-    return getAggregatedIOBCurve(activeDoses, ws, we, 5, dia, peak)
+    return getAggregatedIOBCurve(activeDoses, ws, we, 5)
       .map(p => ({ x: p.time.getTime(), y: p.iob }));
-  }, [activeDoses, windowStart, windowEnd, dia, peak]);
+  }, [activeDoses, windowStart, windowEnd]);
+
+  // Per-bolus IOB curves — each dose gets its own line showing rise/peak/fall
+  const perDoseIOBCurves = useMemo(() => {
+    if (activeDoses.length === 0) return [];
+    const ws = new Date(windowStart);
+    const we = new Date(windowEnd);
+    return activeDoses.map(dose => {
+      const points = getDoseIOBCurve(dose, ws, we, 3);
+      return {
+        id: dose.id,
+        units: dose.units,
+        data: points.map(p => ({ x: p.time.getTime(), y: p.iob })),
+      };
+    }).filter(c => c.data.length > 0);
+  }, [activeDoses, windowStart, windowEnd]);
 
   const maxIOB = useMemo(() => {
     const max = aggregatedIOB.reduce((m, p) => Math.max(m, p.y), 0);
@@ -100,6 +113,24 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
       spanGaps: false,
     });
 
+    // Per-bolus IOB curves — faded individual lines showing each dose's activity
+    perDoseIOBCurves.forEach((curve, i) => {
+      ds.push({
+        label: `Bolus ${curve.units}u`,
+        data: curve.data,
+        borderColor: `rgba(${colors.accentRgb}, 0.35)`,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        tension: 0.3,
+        fill: false,
+        yAxisID: 'yInsulin',
+        order: 4,
+      });
+    });
+
+    // Aggregated IOB — bold filled curve (sum of all individual doses)
     if (aggregatedIOB.length > 0) {
       ds.push({
         label: 'IOB',
@@ -131,7 +162,7 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
     }
 
     return ds;
-  }, [glucosePoints, aggregatedIOB, doseMarkers, ACCENT, GLUCOSE_COLOR, colors.accentRgb]);
+  }, [glucosePoints, aggregatedIOB, perDoseIOBCurves, doseMarkers, ACCENT, GLUCOSE_COLOR, colors.accentRgb]);
 
   const handleChartClick = useCallback((event) => {
     const chart = chartRef.current;
@@ -154,14 +185,14 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
       if (dist < minDist) { minDist = dist; nearestBG = p; }
     }
     const bgValue = (nearestBG && minDist < 15 * 60 * 1000) ? nearestBG.y : null;
-    const iobAtTime = calcTotalIOB(bolusDoses, new Date(timeAtX), dia, peak);
+    const iobAtTime = calcTotalIOB(bolusDoses, new Date(timeAtX));
 
     const timeStr = new Date(timeAtX).toLocaleTimeString('en-US', {
       hour: 'numeric', minute: '2-digit', hour12: true,
     });
 
     setCrosshair({ pixelX: x, time: timeAtX, timeStr, bg: bgValue, iob: iobAtTime });
-  }, [glucosePoints, bolusDoses, dia, peak]);
+  }, [glucosePoints, bolusDoses]);
 
   const options = useMemo(() => ({
     responsive: true,

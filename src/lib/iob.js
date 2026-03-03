@@ -1,50 +1,129 @@
 /**
- * Insulin on Board (IOB) calculation using the OpenAPS exponential model.
- * Based on: https://github.com/openaps/oref0/blob/master/lib/iob/calculate.js
+ * Insulin on Board (IOB) — Humalog pharmacokinetic model.
+ *
+ * Based on median Humalog (lispro) PK data:
+ *   Onset:              22 min
+ *   Peak activity:      60 min
+ *   End of peak:        90 min
+ *   Majority cleared:  150 min  (2.5 hrs)
+ *   Full duration:     240 min  (4 hrs)
+ *
+ * Activity is modelled as piecewise-linear through empirical landmarks,
+ * then numerically integrated to derive IOB fraction remaining.
  */
 
-export function insulinActivity(t, dia = 300, peak = 75) {
-  if (t <= 0 || t >= dia) return 0;
-  const tau = peak * (1 - peak / dia) / (1 - 2 * peak / dia);
-  const a = 2 * tau / dia;
-  const S = 1 / (1 - a + (1 + a) * Math.exp(-dia / tau));
-  return (S / (tau * tau)) * t * (1 - t / dia) * Math.exp(-t / tau);
-}
+const DIA = 240; // full duration in minutes
 
-export function iobFraction(t, dia = 300, peak = 75) {
-  if (t <= 0) return 1;
-  if (t >= dia) return 0;
-  const steps = Math.min(Math.ceil(t), 500);
-  const dt = t / steps;
-  let integral = 0;
-  for (let i = 0; i < steps; i++) {
-    const t1 = i * dt;
-    const t2 = (i + 1) * dt;
-    integral += (insulinActivity(t1, dia, peak) + insulinActivity(t2, dia, peak)) * dt / 2;
+// Insulin activity curve landmarks: [time (min), relative activity]
+// Normalized so the integral = 1 (all insulin absorbed over DIA).
+const ACTIVITY_POINTS = [
+  [0,   0],
+  [12,  0.05],   // sub-threshold absorption beginning
+  [22,  0.25],   // onset — measurable activity starts
+  [40,  0.70],   // rapid ramp
+  [60,  1.00],   // peak activity
+  [75,  0.95],   // sustained near-peak
+  [90,  0.75],   // end of peak plateau
+  [110, 0.40],   // degradation
+  [130, 0.18],   // winding down
+  [150, 0.08],   // majority cleared
+  [180, 0.03],   // residual tail
+  [210, 0.01],
+  [240, 0],      // fully cleared
+];
+
+// Pre-compute normalization constant (trapezoidal integral of raw curve)
+let _rawIntegral = 0;
+for (let i = 0; i < ACTIVITY_POINTS.length - 1; i++) {
+  const [t0, a0] = ACTIVITY_POINTS[i];
+  const [t1, a1] = ACTIVITY_POINTS[i + 1];
+  _rawIntegral += (a0 + a1) * (t1 - t0) / 2;
+}
+const NORM = 1 / _rawIntegral;
+
+// Interpolate activity at arbitrary time t (minutes after dose)
+function rawActivity(t) {
+  if (t <= 0 || t >= DIA) return 0;
+  for (let i = 0; i < ACTIVITY_POINTS.length - 1; i++) {
+    const [t0, a0] = ACTIVITY_POINTS[i];
+    const [t1, a1] = ACTIVITY_POINTS[i + 1];
+    if (t >= t0 && t <= t1) {
+      const frac = (t - t0) / (t1 - t0);
+      return a0 + frac * (a1 - a0);
+    }
   }
-  return Math.max(0, 1 - integral);
+  return 0;
 }
 
-export function calcDoseIOB(dose, atTime, dia = 300, peak = 75) {
+/**
+ * Normalized insulin activity at time t minutes after injection.
+ * Integral from 0 to DIA = 1.
+ */
+export function insulinActivity(t) {
+  return rawActivity(t) * NORM;
+}
+
+/**
+ * Fraction of insulin remaining (IOB) at t minutes after injection.
+ * = 1 − integral(activity, 0..t)
+ *
+ * Uses the piecewise-linear segments directly for exact integration
+ * up to each landmark, then linear interp for the partial segment.
+ */
+export function iobFraction(t) {
+  if (t <= 0) return 1;
+  if (t >= DIA) return 0;
+
+  let absorbed = 0;
+
+  for (let i = 0; i < ACTIVITY_POINTS.length - 1; i++) {
+    const [t0, a0] = ACTIVITY_POINTS[i];
+    const [t1, a1] = ACTIVITY_POINTS[i + 1];
+
+    if (t <= t0) break;
+
+    const segEnd = Math.min(t, t1);
+    // Activity at segEnd via linear interpolation within this segment
+    const frac = (segEnd - t0) / (t1 - t0);
+    const aEnd = a0 + frac * (a1 - a0);
+
+    absorbed += (a0 + aEnd) * (segEnd - t0) / 2;
+
+    if (t <= t1) break;
+  }
+
+  return Math.max(0, Math.min(1, 1 - absorbed * NORM));
+}
+
+/**
+ * IOB (in units) for a single dose at a given time.
+ */
+export function calcDoseIOB(dose, atTime) {
   const doseTime = new Date(dose.timestamp);
   const minutesElapsed = (atTime.getTime() - doseTime.getTime()) / (1000 * 60);
-  if (minutesElapsed < 0 || minutesElapsed >= dia) return 0;
-  return dose.units * iobFraction(minutesElapsed, dia, peak);
+  if (minutesElapsed < 0 || minutesElapsed >= DIA) return 0;
+  return dose.units * iobFraction(minutesElapsed);
 }
 
-export function calcTotalIOB(doses, atTime, dia = 300, peak = 75) {
+/**
+ * Total IOB across all doses at a given time.
+ */
+export function calcTotalIOB(doses, atTime) {
   let total = 0;
   for (const dose of doses) {
-    total += calcDoseIOB(dose, atTime, dia, peak);
+    total += calcDoseIOB(dose, atTime);
   }
   return total;
 }
 
-export function getDoseIOBCurve(dose, startTime, endTime, intervalMinutes = 5, dia = 300, peak = 75) {
+/**
+ * IOB curve for a single dose over a time window (for per-bolus chart lines).
+ */
+export function getDoseIOBCurve(dose, startTime, endTime, intervalMinutes = 5) {
   const points = [];
   const current = new Date(startTime);
   while (current <= endTime) {
-    const iob = calcDoseIOB(dose, current, dia, peak);
+    const iob = calcDoseIOB(dose, current);
     if (iob > 0.01) {
       points.push({ time: new Date(current), iob });
     }
@@ -53,13 +132,19 @@ export function getDoseIOBCurve(dose, startTime, endTime, intervalMinutes = 5, d
   return points;
 }
 
-export function getAggregatedIOBCurve(doses, startTime, endTime, intervalMinutes = 5, dia = 300, peak = 75) {
+/**
+ * Aggregated IOB curve (sum of all doses) over a time window.
+ */
+export function getAggregatedIOBCurve(doses, startTime, endTime, intervalMinutes = 5) {
   const points = [];
   const current = new Date(startTime);
   while (current <= endTime) {
-    const iob = calcTotalIOB(doses, current, dia, peak);
+    const iob = calcTotalIOB(doses, current);
     points.push({ time: new Date(current), iob });
     current.setMinutes(current.getMinutes() + intervalMinutes);
   }
   return points;
 }
+
+/** DIA constant for external use */
+export const HUMALOG_DIA = DIA;

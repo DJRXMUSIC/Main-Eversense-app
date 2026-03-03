@@ -165,8 +165,8 @@ export async function getBasalDoseForDate(date) {
 // === Settings ===
 
 const DEFAULT_SETTINGS = {
-  bolusDIA: 300,
-  bolusPeakTime: 75,
+  bolusDIA: 240,
+  bolusPeakTime: 60,
   targetRangeLow: 70,
   targetRangeHigh: 160,
   graphDisplayLow: 50,
