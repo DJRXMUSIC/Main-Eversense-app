@@ -1,35 +1,28 @@
 /**
  * Insulin on Board (IOB) — Humalog pharmacokinetic model.
  *
- * Based on median Humalog (lispro) PK data:
- *   Onset:              22 min
- *   Peak activity:      60 min
- *   End of peak:        90 min
- *   Majority cleared:  150 min  (2.5 hrs)
- *   Full duration:     240 min  (4 hrs)
+ * Based on Humalog (lispro) PK data:
+ *   Onset:              22 min   (15% active)
+ *   Peak activity:      60 min   (100% active)
+ *   End of peak:        90 min   (85% active)
+ *   Majority cleared:  200 min   (20% active)
+ *   Fully cleared:     330 min   (5.5 hrs)
  *
  * Activity is modelled as piecewise-linear through empirical landmarks,
  * then numerically integrated to derive IOB fraction remaining.
  */
 
-const DIA = 240; // full duration in minutes
+const DIA = 330; // full duration in minutes
 
 // Insulin activity curve landmarks: [time (min), relative activity]
 // Normalized so the integral = 1 (all insulin absorbed over DIA).
 const ACTIVITY_POINTS = [
-  [0,   0],
-  [12,  0.05],   // sub-threshold absorption beginning
-  [22,  0.25],   // onset — measurable activity starts
-  [40,  0.70],   // rapid ramp
-  [60,  1.00],   // peak activity
-  [75,  0.95],   // sustained near-peak
-  [90,  0.75],   // end of peak plateau
-  [110, 0.40],   // degradation
-  [130, 0.18],   // winding down
-  [150, 0.08],   // majority cleared
-  [180, 0.03],   // residual tail
-  [210, 0.01],
-  [240, 0],      // fully cleared
+  [0,   0],       // injection
+  [22,  0.15],    // onset
+  [60,  1.00],    // peak activity
+  [90,  0.85],    // end of peak
+  [200, 0.20],    // majority cleared
+  [330, 0],       // fully cleared
 ];
 
 // Pre-compute normalization constant (trapezoidal integral of raw curve)

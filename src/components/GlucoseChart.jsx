@@ -18,8 +18,8 @@ import { getThemeColors } from '../lib/themes';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, TimeScale, Legend);
 
 const HOUR_MS = 60 * 60 * 1000;
-const PAST_HOURS = 5;
-const FUTURE_HOURS = 1;
+const PAST_HOURS = 4;
+const FUTURE_HOURS = 3;
 const DIA_MS = HUMALOG_DIA * 60 * 1000;
 
 function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
