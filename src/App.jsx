@@ -134,24 +134,24 @@ function App() {
       {/* Quick actions — first thing after header for fast insulin logging */}
       <div className="px-4 py-2 space-y-2">
         <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Quick Bolus</div>
-        <div className="grid grid-cols-5 gap-2">
-          {[2, 3, 4, 5, 6].map((u) => (
+        <div className="grid grid-cols-4 gap-1.5">
+          {[1, 2, 3, 4, 5, 6, 7].map((u) => (
             <button
               key={u}
               onClick={() => logBolus(u)}
-              className="py-3.5 rounded-xl font-bold text-lg bg-accent text-white active:opacity-70 active:scale-95 transition-transform"
+              className="py-2.5 rounded-lg font-bold text-base bg-accent text-white active:opacity-70 active:scale-95 transition-transform"
             >
               {u}u
             </button>
           ))}
-        </div>
-        <div className="flex gap-2">
           <button
             onClick={() => setShowBolus(true)}
-            className="flex-1 py-3 rounded-xl font-medium bg-bg-secondary text-accent active:opacity-80 border border-accent/30"
+            className="py-2.5 rounded-lg font-bold text-base bg-bg-secondary text-accent active:opacity-80 border border-accent/30"
           >
-            Custom Bolus
+            ...
           </button>
+        </div>
+        <div className="flex gap-2">
           <button
             onClick={() => setShowBasal(true)}
             className="flex-1 py-3 rounded-xl font-medium bg-bg-secondary text-text-primary active:opacity-80 border border-bg-tertiary"

@@ -60,24 +60,24 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
         {/* Theme Picker */}
         <div className="mb-6">
           <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Theme</h3>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {Object.values(THEMES).map((theme) => (
               <button
                 key={theme.id}
                 onClick={() => onUpdateSetting('theme', theme.id)}
-                className={`relative p-3 rounded-xl text-center active:opacity-80 ${
+                className={`relative p-2 rounded-xl text-center active:opacity-80 ${
                   settings.theme === theme.id
                     ? 'ring-2 ring-accent bg-bg-secondary'
                     : 'bg-bg-secondary opacity-70'
                 }`}
               >
                 <div
-                  className="w-8 h-8 rounded-full mx-auto mb-1.5"
+                  className="w-7 h-7 rounded-full mx-auto mb-1"
                   style={{ backgroundColor: theme.preview }}
                 />
-                <div className="text-[10px] font-medium leading-tight">{theme.name}</div>
+                <div className="text-[9px] font-medium leading-tight">{theme.name}</div>
                 {settings.theme === theme.id && (
-                  <div className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent" />
+                  <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-accent" />
                 )}
               </button>
             ))}

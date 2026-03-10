@@ -218,8 +218,19 @@ export function useAppData() {
     await loadData();
   }, [loadData]);
 
-  const editBolus = useCallback(async (id, units) => {
-    await updateBolusDose(id, { units: Math.round(units) });
+  const editBolus = useCallback(async (id, updates) => {
+    // Accept either (id, number) for units-only or (id, {units, timestamp, date})
+    if (typeof updates === 'number') {
+      await updateBolusDose(id, { units: Math.round(updates) });
+    } else {
+      const patch = {};
+      if (updates.units != null) patch.units = Math.round(updates.units);
+      if (updates.timestamp) {
+        patch.timestamp = updates.timestamp;
+        patch.date = localDate(new Date(updates.timestamp));
+      }
+      await updateBolusDose(id, patch);
+    }
     await loadData();
   }, [loadData]);
 
