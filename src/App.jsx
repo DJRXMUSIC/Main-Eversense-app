@@ -176,6 +176,8 @@ function App() {
         />
       </Suspense>
 
+      <Stats bolusDoses={bolusDoses} basalDoses={basalDoses} />
+
       <History
         bolusDoses={bolusDoses}
         basalDoses={basalDoses}
@@ -184,8 +186,6 @@ function App() {
         onEditBasal={editBasal}
         onDeleteBasal={removeBasal}
       />
-
-      <Stats bolusDoses={bolusDoses} basalDoses={basalDoses} />
 
       {/* Lazy-loaded modals */}
       <Suspense fallback={null}>
