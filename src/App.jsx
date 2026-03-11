@@ -71,6 +71,7 @@ function App() {
     lastSyncResult,
     doSync,
     refreshData,
+    toast,
   } = useAppData();
 
   const [showBolus, setShowBolus] = useState(false);
@@ -186,6 +187,13 @@ function App() {
         onEditBasal={editBasal}
         onDeleteBasal={removeBasal}
       />
+
+      {/* Toast notification for errors */}
+      {toast && (
+        <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-xl bg-danger text-white text-sm font-medium shadow-lg animate-slide-up">
+          {toast.message}
+        </div>
+      )}
 
       {/* Lazy-loaded modals */}
       <Suspense fallback={null}>

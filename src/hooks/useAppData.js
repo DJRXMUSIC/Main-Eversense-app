@@ -37,12 +37,23 @@ export function useAppData() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState(null);
+  const [toast, setToast] = useState(null);
   const iobInterval = useRef(null);
   const syncInterval = useRef(null);
   const hasSynced = useRef(false);
   const syncingRef = useRef(false);
+  const loadingRef = useRef(false);
+
+  // Show a brief toast message (auto-dismisses after 3s)
+  const showToast = useCallback((message, type = 'error') => {
+    setToast({ message, type, id: Date.now() });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
   const loadData = useCallback(async () => {
+    // Prevent concurrent loads from racing
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     try {
       const today = localDate();
       const now = new Date();
@@ -78,12 +89,14 @@ export function useAppData() {
       // Non-critical work after render: persist date fixes + widget push
       const toFix = allBolus.filter((d, i) => d !== rawBolus[i]);
       if (toFix.length > 0) {
-        for (const d of toFix) updateBolusDose(d.id, { date: d.date });
+        for (const d of toFix) updateBolusDose(d.id, { date: d.date }).catch(() => {});
       }
       pushWidgetData({ iob, glucoseData: glucose, todayBasal: todayB });
     } catch (err) {
       console.error('Failed to load data:', err);
       setLoading(false);
+    } finally {
+      loadingRef.current = false;
     }
   }, []);
 
@@ -99,8 +112,6 @@ export function useAppData() {
         settings.nightscoutUrl || null
       );
       setLastSyncResult({ time: new Date(), ...result });
-      // Always reload data — server may have new readings even if
-      // this particular trigger didn't import (e.g. background poller did)
       await loadData();
     } catch (err) {
       console.error('Sync failed:', err);
@@ -113,7 +124,7 @@ export function useAppData() {
 
   // Initial load — data first, cleanup deferred
   useEffect(() => {
-    loadData().then(() => cleanupOldData());
+    loadData().then(() => cleanupOldData().catch(() => {}));
   }, [loadData]);
 
   // Auto-sync once after initial load
@@ -139,9 +150,9 @@ export function useAppData() {
     return () => clearInterval(syncInterval.current);
   }, [settings?.dataSource, doSync]);
 
-  // Always reload data when the app resumes from background.
-  // iOS/Android may evict the webview — when restored, React state is
-  // stale or empty. This ensures IOB + doses are fresh on every resume.
+  // Reload data when the app resumes from background.
+  // iOS/Android may close the IndexedDB connection while suspended —
+  // the withRetry wrapper in db.js will reconnect automatically.
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -171,40 +182,52 @@ export function useAppData() {
 
   // Apply theme when setting changes
   const updateSetting = useCallback(async (key, value) => {
-    await setSetting(key, value);
-    const s = await getSettings();
-    setSettingsState(s);
-
-    if (key === 'theme') {
-      applyTheme(value);
+    try {
+      await setSetting(key, value);
+      const s = await getSettings();
+      setSettingsState(s);
+      if (key === 'theme') applyTheme(value);
+    } catch (err) {
+      console.error('Failed to save setting:', err);
+      showToast('Failed to save setting');
     }
-  }, []);
+  }, [showToast]);
 
   const logBolus = useCallback(async (units, timestamp) => {
-    const doseTime = timestamp ? new Date(timestamp) : new Date();
-    const dose = {
-      id: crypto.randomUUID(),
-      timestamp: timestamp || new Date().toISOString(),
-      date: localDate(doseTime),
-      units: Math.round(units),
-      type: 'bolus',
-      insulinType: 'humalog',
-    };
-    await addBolusDose(dose);
-    await loadData();
-  }, [loadData]);
+    try {
+      const doseTime = timestamp ? new Date(timestamp) : new Date();
+      const dose = {
+        id: crypto.randomUUID(),
+        timestamp: timestamp || new Date().toISOString(),
+        date: localDate(doseTime),
+        units: Math.round(units),
+        type: 'bolus',
+        insulinType: 'humalog',
+      };
+      await addBolusDose(dose);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to log bolus:', err);
+      showToast('Failed to log bolus — tap to retry');
+    }
+  }, [loadData, showToast]);
 
   const logBasal = useCallback(async (units, date) => {
-    const dose = {
-      id: crypto.randomUUID(),
-      date: date || localDate(),
-      units,
-      type: 'basal',
-      insulinType: 'toujeo',
-    };
-    await addBasalDose(dose);
-    await loadData();
-  }, [loadData]);
+    try {
+      const dose = {
+        id: crypto.randomUUID(),
+        date: date || localDate(),
+        units,
+        type: 'basal',
+        insulinType: 'toujeo',
+      };
+      await addBasalDose(dose);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to log basal:', err);
+      showToast('Failed to log basal');
+    }
+  }, [loadData, showToast]);
 
   const importGlucose = useCallback(async (readings) => {
     const result = await addGlucoseReadings(readings);
@@ -214,35 +237,54 @@ export function useAppData() {
   }, [loadData]);
 
   const removeBolus = useCallback(async (id) => {
-    await deleteBolusDose(id);
-    await loadData();
-  }, [loadData]);
+    try {
+      await deleteBolusDose(id);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to delete bolus:', err);
+      showToast('Failed to delete');
+    }
+  }, [loadData, showToast]);
 
   const editBolus = useCallback(async (id, updates) => {
-    // Accept either (id, number) for units-only or (id, {units, timestamp, date})
-    if (typeof updates === 'number') {
-      await updateBolusDose(id, { units: Math.round(updates) });
-    } else {
-      const patch = {};
-      if (updates.units != null) patch.units = Math.round(updates.units);
-      if (updates.timestamp) {
-        patch.timestamp = updates.timestamp;
-        patch.date = localDate(new Date(updates.timestamp));
+    try {
+      if (typeof updates === 'number') {
+        await updateBolusDose(id, { units: Math.round(updates) });
+      } else {
+        const patch = {};
+        if (updates.units != null) patch.units = Math.round(updates.units);
+        if (updates.timestamp) {
+          patch.timestamp = updates.timestamp;
+          patch.date = localDate(new Date(updates.timestamp));
+        }
+        await updateBolusDose(id, patch);
       }
-      await updateBolusDose(id, patch);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to edit bolus:', err);
+      showToast('Failed to save edit');
     }
-    await loadData();
-  }, [loadData]);
+  }, [loadData, showToast]);
 
   const removeBasal = useCallback(async (id) => {
-    await deleteBasalDose(id);
-    await loadData();
-  }, [loadData]);
+    try {
+      await deleteBasalDose(id);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to delete basal:', err);
+      showToast('Failed to delete');
+    }
+  }, [loadData, showToast]);
 
   const editBasal = useCallback(async (id, units) => {
-    await updateBasalDose(id, { units });
-    await loadData();
-  }, [loadData]);
+    try {
+      await updateBasalDose(id, { units });
+      await loadData();
+    } catch (err) {
+      console.error('Failed to edit basal:', err);
+      showToast('Failed to save edit');
+    }
+  }, [loadData, showToast]);
 
   const doExport = useCallback(async () => {
     const data = await exportAllData();
@@ -270,6 +312,7 @@ export function useAppData() {
     loading,
     syncing,
     lastSyncResult,
+    toast,
     logBolus,
     logBasal,
     importGlucose,
