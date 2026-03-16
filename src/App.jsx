@@ -212,39 +212,39 @@ function App() {
           </button>
         </div>
 
-        {/* Exercise + High Fat row */}
-        <div className="flex gap-1.5">
-          <div className="flex gap-1 flex-1">
-            <button
-              onClick={() => logExercise(1)}
-              className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 active:opacity-70 border border-green-500/30"
-            >
-              Light
-            </button>
-            <button
-              onClick={() => logExercise(2)}
-              className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-yellow-400/20 text-yellow-300 active:opacity-70 border border-yellow-400/30"
-            >
-              Med
-            </button>
-            <button
-              onClick={() => logExercise(3)}
-              className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 active:opacity-70 border border-red-500/30"
-            >
-              Hard
-            </button>
-          </div>
+        {/* Exercise row */}
+        <div className="flex gap-1">
           <button
-            onClick={highFatTime ? clearHighFat : logHighFat}
-            className={`px-3 py-2 rounded-lg text-[10px] font-bold active:opacity-70 border ${
-              highFatTime
-                ? 'bg-accent/20 text-accent border-accent/40'
-                : 'bg-bg-secondary text-text-secondary border-bg-tertiary'
-            }`}
+            onClick={() => logExercise(1)}
+            className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 active:opacity-70 border border-green-500/30"
           >
-            {highFatTime ? `Fat ${formatCountdown(highFatTime) || '0m'}` : '+Fat'}
+            Light
+          </button>
+          <button
+            onClick={() => logExercise(2)}
+            className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-yellow-400/20 text-yellow-300 active:opacity-70 border border-yellow-400/30"
+          >
+            Med
+          </button>
+          <button
+            onClick={() => logExercise(3)}
+            className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 active:opacity-70 border border-red-500/30"
+          >
+            Hard
           </button>
         </div>
+
+        {/* Insulin Resistance toggle */}
+        <button
+          onClick={highFatTime ? clearHighFat : logHighFat}
+          className={`w-full py-2.5 rounded-lg text-xs font-bold active:opacity-70 border ${
+            highFatTime
+              ? 'bg-accent/20 text-accent border-accent/40'
+              : 'bg-bg-secondary text-text-secondary border-bg-tertiary'
+          }`}
+        >
+          {highFatTime ? `Insulin Resistance — ${formatCountdown(highFatTime) || '0m'} remaining` : '+ Insulin Resistance'}
+        </button>
       </div>
 
       <Suspense fallback={<div className="h-[240px]" />}>

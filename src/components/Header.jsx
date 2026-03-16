@@ -143,9 +143,9 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
         </div>
       </div>
 
-      {/* Exercise bars + Fat countdown — compact row */}
+      {/* Exercise bars + Insulin Resistance status */}
       {(recentExercise?.length > 0 || highFatTime) && (
-        <div className="flex items-center gap-2 px-1 mb-1">
+        <div className="flex items-center gap-3 px-1 mb-1">
           {/* Exercise: last 3 workouts as intensity bars */}
           {recentExercise?.length > 0 && (
             <div className="flex items-center gap-1.5">
@@ -158,11 +158,11 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
             </div>
           )}
 
-          {/* Fat countdown */}
+          {/* Insulin Resistance countdown */}
           {highFatTime && fatCountdown && (
-            <div className="flex items-center gap-1 ml-auto">
-              <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-              <span className="text-[10px] text-accent font-medium">Fat {fatCountdown}</span>
+            <div className="flex items-center gap-1.5 ml-auto bg-accent/10 px-2.5 py-1 rounded-lg">
+              <div className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse" />
+              <span className="text-xs text-accent font-semibold">Insulin Resistance — {fatCountdown}</span>
             </div>
           )}
         </div>
