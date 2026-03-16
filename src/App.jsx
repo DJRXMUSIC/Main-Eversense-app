@@ -44,7 +44,7 @@ class ErrorBoundary extends Component {
 }
 
 const INTENSITY_COLORS = ['', 'bg-green-500', 'bg-yellow-400', 'bg-red-500'];
-const FAT_DURATION_MS = 8 * 60 * 60 * 1000;
+const FAT_DURATION_MS = 5 * 60 * 60 * 1000;
 
 function formatTimeSince(ts) {
   const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);

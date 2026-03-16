@@ -151,8 +151,8 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
             <div className="flex items-center gap-1.5">
               {recentExercise.map((ex) => (
                 <div key={ex.id} className="flex flex-col items-center">
-                  <div className={`w-3 h-8 rounded-sm ${INTENSITY_COLORS[ex.intensity] || 'bg-gray-500'}`} />
-                  <div className="text-[8px] text-text-secondary mt-0.5">{formatTimeSince(ex.timestamp)}</div>
+                  <div className={`w-4 h-9 rounded-sm ${INTENSITY_COLORS[ex.intensity] || 'bg-gray-500'}`} />
+                  <div className="text-[11px] font-medium text-text-secondary mt-0.5">{formatTimeSince(ex.timestamp)}</div>
                 </div>
               ))}
             </div>

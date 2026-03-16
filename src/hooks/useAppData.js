@@ -82,7 +82,7 @@ export function useAppData() {
       ]);
       setExerciseLogs(Array.isArray(exLogs) ? exLogs : []);
       // Only set fat time if it's still within the 8hr window
-      const FAT_DURATION = 8 * 60 * 60 * 1000;
+      const FAT_DURATION = 5 * 60 * 60 * 1000;
       if (fatTime && Date.now() - new Date(fatTime).getTime() < FAT_DURATION) {
         setHighFatTime(fatTime);
       } else {
