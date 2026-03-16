@@ -21,6 +21,16 @@ import {
 import { calcTotalIOB, HUMALOG_DIA } from '../lib/iob';
 import { syncGlucoseReadings, pushWidgetData } from '../lib/sync';
 import { applyTheme } from '../lib/themes';
+import {
+  pushBolus,
+  pushBasal,
+  pushBolusUpdate,
+  pushBasalUpdate,
+  removeCloudBolus,
+  removeCloudBasal,
+  pushSetting,
+  pullAllData,
+} from '../lib/firestore-sync';
 
 // Local calendar date as YYYY-MM-DD (Eastern/device timezone, not UTC)
 function localDate(d = new Date()) {
@@ -139,9 +149,48 @@ export function useAppData() {
     }
   }, [loadData, settings]);
 
-  // Initial load — data first, cleanup deferred
+  // Initial load — restore from cloud first, then load locally
   useEffect(() => {
-    loadData().then(() => cleanupOldData().catch(() => {}));
+    (async () => {
+      try {
+        const cloud = await pullAllData();
+        if (cloud) {
+          // Merge cloud bolus doses missing locally
+          const localBolus = await getAllBolusDoses();
+          const localBolusIds = new Set(localBolus.map(d => d.id));
+          for (const dose of cloud.bolusDoses) {
+            if (!localBolusIds.has(dose.id)) {
+              await addBolusDose(dose).catch(() => {});
+            }
+          }
+          // Merge cloud basal doses missing locally
+          const localBasal = await getBasalDoses(90);
+          const localBasalIds = new Set(localBasal.map(d => d.id));
+          for (const dose of cloud.basalDoses) {
+            if (!localBasalIds.has(dose.id)) {
+              await addBasalDose(dose).catch(() => {});
+            }
+          }
+          // Restore settings (exercise logs, high fat, etc.) if missing locally
+          if (cloud.settings.exerciseLogs) {
+            const local = await getSetting('exerciseLogs');
+            if (!local || !Array.isArray(local) || local.length === 0) {
+              await setSetting('exerciseLogs', cloud.settings.exerciseLogs);
+            }
+          }
+          if (cloud.settings.highFatTime) {
+            const local = await getSetting('highFatTime');
+            if (!local) {
+              await setSetting('highFatTime', cloud.settings.highFatTime);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Cloud restore failed (non-fatal):', e);
+      }
+      await loadData();
+      cleanupOldData().catch(() => {});
+    })();
   }, [loadData]);
 
   // Auto-sync once after initial load
@@ -201,6 +250,7 @@ export function useAppData() {
   const updateSetting = useCallback(async (key, value) => {
     try {
       await setSetting(key, value);
+      pushSetting(key, value);
       const s = await getSettings();
       setSettingsState(s);
       if (key === 'theme') applyTheme(value);
@@ -222,6 +272,7 @@ export function useAppData() {
         insulinType: 'humalog',
       };
       await addBolusDose(dose);
+      pushBolus(dose);
       await loadData();
     } catch (err) {
       console.error('Failed to log bolus:', err);
@@ -239,6 +290,7 @@ export function useAppData() {
         insulinType: 'toujeo',
       };
       await addBasalDose(dose);
+      pushBasal(dose);
       await loadData();
     } catch (err) {
       console.error('Failed to log basal:', err);
@@ -256,6 +308,7 @@ export function useAppData() {
   const removeBolus = useCallback(async (id) => {
     try {
       await deleteBolusDose(id);
+      removeCloudBolus(id);
       await loadData();
     } catch (err) {
       console.error('Failed to delete bolus:', err);
@@ -265,17 +318,19 @@ export function useAppData() {
 
   const editBolus = useCallback(async (id, updates) => {
     try {
+      let patch;
       if (typeof updates === 'number') {
-        await updateBolusDose(id, { units: Math.round(updates) });
+        patch = { units: Math.round(updates) };
       } else {
-        const patch = {};
+        patch = {};
         if (updates.units != null) patch.units = Math.round(updates.units);
         if (updates.timestamp) {
           patch.timestamp = updates.timestamp;
           patch.date = localDate(new Date(updates.timestamp));
         }
-        await updateBolusDose(id, patch);
       }
+      await updateBolusDose(id, patch);
+      pushBolusUpdate(id, patch);
       await loadData();
     } catch (err) {
       console.error('Failed to edit bolus:', err);
@@ -286,6 +341,7 @@ export function useAppData() {
   const removeBasal = useCallback(async (id) => {
     try {
       await deleteBasalDose(id);
+      removeCloudBasal(id);
       await loadData();
     } catch (err) {
       console.error('Failed to delete basal:', err);
@@ -296,6 +352,7 @@ export function useAppData() {
   const editBasal = useCallback(async (id, units) => {
     try {
       await updateBasalDose(id, { units });
+      pushBasalUpdate(id, { units });
       await loadData();
     } catch (err) {
       console.error('Failed to edit basal:', err);
@@ -314,6 +371,7 @@ export function useAppData() {
       const existing = Array.isArray(exerciseLogs) ? exerciseLogs : [];
       const updated = [entry, ...existing].slice(0, 20);
       await setSetting('exerciseLogs', updated);
+      pushSetting('exerciseLogs', updated);
       setExerciseLogs(updated);
     } catch (err) {
       console.error('Failed to log exercise:', err);
@@ -325,6 +383,7 @@ export function useAppData() {
     try {
       const updated = exerciseLogs.filter(e => e.id !== id);
       await setSetting('exerciseLogs', updated);
+      pushSetting('exerciseLogs', updated);
       setExerciseLogs(updated);
     } catch (err) {
       showToast('Failed to delete');
@@ -336,6 +395,7 @@ export function useAppData() {
     try {
       const now = new Date().toISOString();
       await setSetting('highFatTime', now);
+      pushSetting('highFatTime', now);
       setHighFatTime(now);
     } catch (err) {
       showToast('Failed to log high fat');
@@ -345,6 +405,7 @@ export function useAppData() {
   const clearHighFat = useCallback(async () => {
     try {
       await setSetting('highFatTime', null);
+      pushSetting('highFatTime', null);
       setHighFatTime(null);
     } catch (err) {
       showToast('Failed to clear');
