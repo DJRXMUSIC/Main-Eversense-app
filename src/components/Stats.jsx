@@ -77,7 +77,7 @@ export default function Stats({ bolusDoses, basalDoses }) {
       label: 'Bolus : Basal',
       value: bolusRatio !== null ? `${bolusRatio}:${100 - bolusRatio}` : '--',
       sublabel: bolusRatio !== null ? 'Target ~50:50' : 'Log basal to see ratio',
-      color: bolusRatio !== null && bolusRatio >= 40 && bolusRatio <= 60 ? 'text-accent' : 'text-yellow-400',
+      color: 'text-accent',
     },
     {
       id: '7d-avg-tdi',
@@ -91,7 +91,7 @@ export default function Stats({ bolusDoses, basalDoses }) {
       label: 'Injections Today',
       value: `${todayDoseCount}`,
       sublabel: todayDoseCount > 0 ? `Avg ${(todayBolusTotal / todayDoseCount).toFixed(1)}u each` : 'No boluses yet',
-      color: 'text-text-primary',
+      color: 'text-accent',
     },
     {
       id: '7d-avg-bolus',
