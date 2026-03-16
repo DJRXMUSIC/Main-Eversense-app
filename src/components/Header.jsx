@@ -13,18 +13,8 @@ const DIRECTION_ARROWS = {
   NONE: '',
 };
 
-const INTENSITY_COLORS = ['', 'bg-green-500', 'bg-yellow-400', 'bg-red-500'];
 
-function formatTimeSince(ts) {
-  const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  const rm = mins % 60;
-  return rm > 0 ? `${hrs}h${rm}m` : `${hrs}h`;
-}
-
-export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSettings, syncing, lastSyncResult, onSync, settings, recentExercise, fatCountdown, highFatTime }) {
+export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSettings, syncing, lastSyncResult, onSync, settings }) {
   const lastReading = glucoseData.length > 0 ? glucoseData[glucoseData.length - 1] : null;
 
   const bgStatus = useMemo(() => {
@@ -107,14 +97,14 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
       {/* Hero: BG + right column */}
       <div className="flex items-stretch gap-2 mb-1">
         {/* Blood Glucose */}
-        <div className="flex-1 bg-bg-secondary rounded-xl p-3 flex flex-col items-center justify-center min-h-[100px]">
+        <div className="flex-1 bg-bg-secondary rounded-xl p-3 flex flex-col items-center justify-center min-h-[80px]">
           <div className="text-[9px] uppercase tracking-widest text-text-secondary mb-0.5">Blood Glucose</div>
           <div className="flex items-baseline gap-1">
-            <span className={`text-4xl font-black tabular-nums ${bgStatus.color} ${bgStatus.stale ? 'opacity-50' : ''}`}>
+            <span className={`text-2xl font-black tabular-nums ${bgStatus.color} ${bgStatus.stale ? 'opacity-50' : ''}`}>
               {lastReading ? lastReading.value : '---'}
             </span>
             {trendArrow && (
-              <span className={`text-xl ${bgStatus.color}`}>{trendArrow}</span>
+              <span className={`text-base ${bgStatus.color}`}>{trendArrow}</span>
             )}
           </div>
           <div className="text-[11px] text-text-secondary mt-0.5">
@@ -126,10 +116,10 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
         </div>
 
         {/* Right column: IOB + Basal stacked */}
-        <div className="flex flex-col gap-1.5 w-[100px]">
+        <div className="flex flex-col gap-1.5 w-[130px]">
           <div className="flex-1 bg-bg-secondary rounded-xl p-2 flex flex-col items-center justify-center">
             <div className="text-[9px] uppercase tracking-widest text-text-secondary">IOB</div>
-            <div className="text-2xl font-black text-accent tabular-nums">{currentIOB.toFixed(1)}</div>
+            <div className="text-4xl font-black text-accent tabular-nums">{currentIOB.toFixed(1)}</div>
             <div className="text-[9px] text-text-secondary">units</div>
           </div>
           <div className="bg-bg-secondary rounded-xl p-2 flex flex-col items-center justify-center">
@@ -143,30 +133,6 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
         </div>
       </div>
 
-      {/* Exercise bars + Insulin Resistance status */}
-      {(recentExercise?.length > 0 || highFatTime) && (
-        <div className="flex items-center gap-3 px-1 mb-1">
-          {/* Exercise: last 3 workouts as intensity bars */}
-          {recentExercise?.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              {recentExercise.map((ex) => (
-                <div key={ex.id} className="flex flex-col items-center">
-                  <div className={`w-4 h-9 rounded-sm ${INTENSITY_COLORS[ex.intensity] || 'bg-gray-500'}`} />
-                  <div className="text-[11px] font-medium text-text-secondary mt-0.5">{formatTimeSince(ex.timestamp)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Insulin Resistance countdown */}
-          {highFatTime && fatCountdown && (
-            <div className="flex items-center gap-1.5 ml-auto bg-accent/10 px-2.5 py-1 rounded-lg">
-              <div className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse" />
-              <span className="text-xs text-accent font-semibold">Insulin Resistance — {fatCountdown}</span>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

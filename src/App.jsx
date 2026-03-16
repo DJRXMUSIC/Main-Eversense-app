@@ -43,16 +43,25 @@ class ErrorBoundary extends Component {
   }
 }
 
-const INTENSITY_COLORS = ['', 'bg-green-500', 'bg-yellow-400', 'bg-red-500'];
+const INTENSITY_LABELS = ['', 'Light Exercise', 'Moderate Exercise', 'Intense Exercise'];
+const INTENSITY_STYLES = [
+  '',
+  'bg-green-500/15 text-green-400 border-green-500/30',
+  'bg-yellow-400/15 text-yellow-300 border-yellow-400/30',
+  'bg-red-500/15 text-red-400 border-red-500/30',
+];
 const FAT_DURATION_MS = 5 * 60 * 60 * 1000;
 
 function formatTimeSince(ts) {
   const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
   if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  const rm = mins % 60;
-  return rm > 0 ? `${hrs}h${rm}m` : `${hrs}h`;
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  const remainHrs = hrs % 24;
+  if (remainHrs === 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+  return `${days} day${days > 1 ? 's' : ''}, ${remainHrs}h ago`;
 }
 
 function formatCountdown(ts) {
@@ -170,9 +179,6 @@ function App() {
         lastSyncResult={lastSyncResult}
         onSync={doSync}
         settings={settings}
-        recentExercise={recentExercise}
-        fatCountdown={fatCountdown}
-        highFatTime={highFatTime}
       />
 
       {/* Quick actions — compact */}
@@ -212,27 +218,23 @@ function App() {
           </button>
         </div>
 
-        {/* Exercise row */}
+        {/* Log exercise + insulin resistance buttons */}
         <div className="flex gap-1">
-          <button
-            onClick={() => logExercise(1)}
-            className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 active:opacity-70 border border-green-500/30"
-          >
-            Light
-          </button>
-          <button
-            onClick={() => logExercise(2)}
-            className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-yellow-400/20 text-yellow-300 active:opacity-70 border border-yellow-400/30"
-          >
-            Med
-          </button>
-          <button
-            onClick={() => logExercise(3)}
-            className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 active:opacity-70 border border-red-500/30"
-          >
-            Hard
-          </button>
+          <button onClick={() => logExercise(1)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 active:opacity-70 border border-green-500/30">Light</button>
+          <button onClick={() => logExercise(2)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-yellow-400/20 text-yellow-300 active:opacity-70 border border-yellow-400/30">Med</button>
+          <button onClick={() => logExercise(3)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 active:opacity-70 border border-red-500/30">Hard</button>
         </div>
+
+        {/* Stacked exercise display — last 3 as full-width bars */}
+        {recentExercise.length > 0 && (
+          <div className="space-y-1">
+            {recentExercise.map((ex) => (
+              <div key={ex.id} className={`w-full py-2 px-3 rounded-lg text-xs font-semibold border ${INTENSITY_STYLES[ex.intensity] || 'bg-bg-secondary text-text-secondary border-bg-tertiary'}`}>
+                {INTENSITY_LABELS[ex.intensity] || 'Exercise'} — {formatTimeSince(ex.timestamp)}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Insulin Resistance toggle */}
         <button
