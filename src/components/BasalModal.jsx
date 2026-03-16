@@ -12,22 +12,21 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-    // Check if there's an existing dose for the selected date
     getBasalDoseForDate(date).then((existing) => {
       if (existing) {
-        setUnits(String(existing.units));
+        setUnits(String(Math.round(existing.units)));
         setIsEditing(true);
       } else {
-        setUnits(defaultUnits ? String(defaultUnits) : '');
+        setUnits(defaultUnits ? String(Math.round(defaultUnits)) : '');
         setIsEditing(false);
       }
     });
   }, [date, defaultUnits]);
 
-  const unitsNum = parseFloat(units) || 0;
+  const unitsNum = parseInt(units) || 0;
 
   const adjustUnits = (delta) => {
-    const newVal = Math.max(0, Math.round((unitsNum + delta) * 2) / 2);
+    const newVal = Math.max(0, unitsNum + delta);
     setUnits(newVal > 0 ? String(newVal) : '');
   };
 
@@ -37,7 +36,6 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
     onClose();
   };
 
-  // Generate past 7 days for date picker
   const dates = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date();
@@ -58,23 +56,22 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={onClose}>
       <div
-        className="w-full max-w-lg bg-bg-secondary rounded-t-2xl p-6 pb-10"
+        className="w-full max-w-lg bg-bg-secondary rounded-t-2xl p-5 pb-8"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold">{isEditing ? 'Edit' : 'Log'} Basal</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold">{isEditing ? 'Edit' : 'Log'} Basal</h2>
           <button onClick={onClose} className="text-text-secondary text-2xl leading-none">&times;</button>
         </div>
 
-        {/* Date selection */}
-        <div className="mb-6">
-          <label className="text-text-secondary text-sm mb-2 block">Date</label>
-          <div className="flex flex-wrap gap-2">
+        <div className="mb-4">
+          <label className="text-text-secondary text-xs mb-1.5 block">Date</label>
+          <div className="flex flex-wrap gap-1.5">
             {dates.map((d) => (
               <button
                 key={d}
                 onClick={() => setDate(d)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium ${d === date ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-secondary'}`}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium ${d === date ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-secondary'}`}
               >
                 {formatDateLabel(d)}
               </button>
@@ -82,40 +79,27 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
           </div>
         </div>
 
-        {/* Units input */}
-        <div className="mb-6">
-          <label className="text-text-secondary text-sm mb-2 block">Units (Toujeo)</label>
+        <div className="mb-4">
+          <label className="text-text-secondary text-xs mb-1.5 block">Units (Toujeo)</label>
           <div className="flex items-center gap-3 justify-center">
             <button
               onClick={() => adjustUnits(-1)}
-              className="w-12 h-12 rounded-xl bg-bg-tertiary text-xl font-bold active:bg-bg-primary"
+              className="w-11 h-11 rounded-xl bg-bg-tertiary text-lg font-bold active:bg-bg-primary"
             >
               -1
             </button>
-            <button
-              onClick={() => adjustUnits(-0.5)}
-              className="w-12 h-12 rounded-xl bg-bg-tertiary text-lg font-bold active:bg-bg-primary"
-            >
-              -.5
-            </button>
             <input
               type="number"
-              inputMode="decimal"
-              step="0.5"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={units}
-              onChange={(e) => setUnits(e.target.value)}
+              onChange={(e) => setUnits(e.target.value.replace(/\D/g, ''))}
               placeholder="0"
-              className="w-24 h-16 text-center text-4xl font-bold bg-bg-primary rounded-xl border border-bg-tertiary focus:border-accent outline-none"
+              className="w-20 h-14 text-center text-3xl font-bold bg-bg-primary rounded-xl border border-bg-tertiary focus:border-accent outline-none"
             />
             <button
-              onClick={() => adjustUnits(0.5)}
-              className="w-12 h-12 rounded-xl bg-bg-tertiary text-lg font-bold active:bg-bg-primary"
-            >
-              +.5
-            </button>
-            <button
               onClick={() => adjustUnits(1)}
-              className="w-12 h-12 rounded-xl bg-bg-tertiary text-xl font-bold active:bg-bg-primary"
+              className="w-11 h-11 rounded-xl bg-bg-tertiary text-lg font-bold active:bg-bg-primary"
             >
               +1
             </button>
@@ -125,7 +109,7 @@ export default function BasalModal({ onClose, onSave, defaultUnits }) {
         <button
           onClick={handleSave}
           disabled={unitsNum <= 0}
-          className="w-full py-4 rounded-xl font-bold text-lg bg-accent text-white disabled:opacity-40 active:opacity-80"
+          className="w-full py-3 rounded-xl font-bold text-base bg-accent text-white disabled:opacity-40 active:opacity-80"
         >
           {isEditing ? 'Update' : 'Log'} {unitsNum > 0 ? `${unitsNum}u Toujeo` : 'Basal'}
         </button>

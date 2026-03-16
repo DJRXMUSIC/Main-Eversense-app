@@ -120,17 +120,17 @@ export default function Stats({ bolusDoses, basalDoses }) {
   ];
 
   return (
-    <div className="px-4 pb-4">
-      <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Stats</h3>
-      <div className="grid grid-cols-2 gap-2">
+    <div className="px-3 pb-2">
+      <h3 className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-1">Stats</h3>
+      <div className="grid grid-cols-3 gap-1.5">
         {tiles.map((tile) => (
-          <div key={tile.id} className="bg-bg-secondary rounded-xl p-3">
-            <div className="text-xs text-text-secondary">{tile.label}</div>
-            <div className={`text-2xl font-bold tabular-nums ${tile.color}`}>
+          <div key={tile.id} className="bg-bg-secondary rounded-lg p-2">
+            <div className="text-[9px] text-text-secondary leading-tight">{tile.label}</div>
+            <div className={`text-lg font-bold tabular-nums ${tile.color}`}>
               {tile.value}
             </div>
             {tile.sublabel && (
-              <div className="text-[10px] text-text-secondary opacity-70">{tile.sublabel}</div>
+              <div className="text-[8px] text-text-secondary opacity-70 leading-tight">{tile.sublabel}</div>
             )}
           </div>
         ))}

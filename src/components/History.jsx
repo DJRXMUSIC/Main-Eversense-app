@@ -5,22 +5,26 @@ function localDate(d = new Date()) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-function toLocalDatetimeValue(isoString) {
-  const d = new Date(isoString);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
+const INTENSITY_LABELS = ['', 'Light', 'Moderate', 'Intense'];
+const INTENSITY_DOT = ['', 'bg-green-500', 'bg-yellow-400', 'bg-red-500'];
+
+// Generate 15-min time offset options for editing
+const TIME_OFFSETS = [];
+for (let m = -120; m <= 120; m += 15) {
+  if (m === 0) TIME_OFFSETS.push({ label: 'No change', minutes: 0 });
+  else if (m < 0) TIME_OFFSETS.push({ label: `${Math.abs(m)}m earlier`, minutes: m });
+  else TIME_OFFSETS.push({ label: `${m}m later`, minutes: m });
 }
 
-export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteBolus, onEditBasal, onDeleteBasal }) {
+export default function History({ bolusDoses, basalDoses, exerciseLogs, onEditBolus, onDeleteBolus, onEditBasal, onDeleteBasal, onDeleteExercise }) {
   const [showAll, setShowAll] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
-  const [editTime, setEditTime] = useState('');
+  const [editTimeOffset, setEditTimeOffset] = useState(0);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const cutoff48h = useMemo(() => Date.now() - 48 * 60 * 60 * 1000, []);
 
-  // Merge all events into a single sorted timeline
   const allEvents = useMemo(() => {
     const all = [];
 
@@ -49,6 +53,19 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
       });
     }
 
+    for (const ex of (exerciseLogs || [])) {
+      const t = new Date(ex.timestamp);
+      all.push({
+        id: ex.id,
+        type: 'exercise',
+        dateKey: localDate(t),
+        time: t,
+        intensity: ex.intensity,
+        label: `${INTENSITY_LABELS[ex.intensity] || 'Exercise'}`,
+        detail: t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      });
+    }
+
     all.sort((a, b) => {
       if (a.dateKey !== b.dateKey) return b.dateKey.localeCompare(a.dateKey);
       if (a.type === 'basal' && b.type !== 'basal') return 1;
@@ -56,18 +73,15 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
       return b.time - a.time;
     });
     return all;
-  }, [bolusDoses, basalDoses]);
+  }, [bolusDoses, basalDoses, exerciseLogs]);
 
-  // Recent = last 48 hours
   const recentEvents = useMemo(() => {
     return allEvents.filter(e => e.time.getTime() >= cutoff48h);
   }, [allEvents, cutoff48h]);
 
   const olderCount = allEvents.length - recentEvents.length;
-
   const events = showAll ? allEvents : recentEvents;
 
-  // Group events by local date
   const grouped = useMemo(() => {
     const groups = {};
     for (const event of events) {
@@ -90,7 +104,7 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
   const startEdit = (event) => {
     setEditingId(event.id);
     setEditValue(String(event.units));
-    setEditTime(event.type === 'bolus' && event.timestamp ? toLocalDatetimeValue(event.timestamp) : '');
+    setEditTimeOffset(0);
     setConfirmDeleteId(null);
   };
 
@@ -102,8 +116,9 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
     }
     if (event.type === 'bolus') {
       const updates = { units: newUnits };
-      if (editTime) {
-        updates.timestamp = new Date(editTime).toISOString();
+      if (editTimeOffset !== 0 && event.timestamp) {
+        const newTime = new Date(new Date(event.timestamp).getTime() + editTimeOffset * 60000);
+        updates.timestamp = newTime.toISOString();
       }
       onEditBolus(event.id, updates);
     } else {
@@ -113,127 +128,94 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
   };
 
   const handleDelete = (event) => {
-    if (event.type === 'bolus') {
-      onDeleteBolus(event.id);
-    } else {
-      onDeleteBasal(event.id);
-    }
+    if (event.type === 'bolus') onDeleteBolus(event.id);
+    else if (event.type === 'basal') onDeleteBasal(event.id);
+    else if (event.type === 'exercise') onDeleteExercise(event.id);
     setConfirmDeleteId(null);
   };
 
+  const getDotColor = (event) => {
+    if (event.type === 'bolus') return 'bg-accent';
+    if (event.type === 'basal') return 'bg-glucose';
+    return INTENSITY_DOT[event.intensity] || 'bg-gray-400';
+  };
+
   return (
-    <div className="px-4 pb-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-sm text-text-secondary">
-          History ({recentEvents.length} recent)
+    <div className="px-3 pb-2">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-xs text-text-secondary">
+          History ({recentEvents.length})
         </div>
         {olderCount > 0 && (
           <button
             onClick={() => setShowAll(!showAll)}
-            className="text-xs text-accent font-medium active:opacity-70"
+            className="text-[10px] text-accent font-medium active:opacity-70"
           >
-            {showAll ? 'Show Recent' : `+${olderCount} older`}
+            {showAll ? 'Recent' : `+${olderCount} older`}
           </button>
         )}
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {grouped.map(([dateStr, dateEvents]) => (
           <div key={dateStr}>
-            <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">
+            <div className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider mb-0.5">
               {formatDateHeader(dateStr)}
             </div>
-            <div className="bg-bg-secondary rounded-xl overflow-hidden">
+            <div className="bg-bg-secondary rounded-lg overflow-hidden">
               {dateEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="border-b border-bg-tertiary last:border-b-0"
-                >
+                <div key={event.id} className="border-b border-bg-tertiary last:border-b-0">
                   {confirmDeleteId === event.id ? (
-                    <div className="flex items-center gap-2 px-4 py-2.5">
-                      <div className="flex-1 text-sm text-danger">Delete {event.label}?</div>
-                      <button
-                        onClick={() => setConfirmDeleteId(null)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-bg-tertiary text-text-secondary"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleDelete(event)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-danger text-white"
-                      >
-                        Delete
-                      </button>
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <div className="flex-1 text-xs text-danger">Delete {event.label}?</div>
+                      <button onClick={() => setConfirmDeleteId(null)} className="px-2 py-1 rounded text-[10px] font-medium bg-bg-tertiary text-text-secondary">Cancel</button>
+                      <button onClick={() => handleDelete(event)} className="px-2 py-1 rounded text-[10px] font-medium bg-danger text-white">Delete</button>
                     </div>
                   ) : editingId === event.id ? (
-                    /* Edit row — scrollable above keyboard */
-                    <div className="px-4 py-2 space-y-2" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}>
+                    <div className="px-3 py-2 space-y-1.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 6px)' }}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${event.type === 'bolus' ? 'bg-accent' : 'bg-glucose'}`} />
+                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getDotColor(event)}`} />
                         <div className="flex items-center gap-1 flex-1">
-                          <button
-                            onClick={() => setEditValue(String(Math.max(1, (parseInt(editValue) || 0) - 1)))}
-                            className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
-                          >-</button>
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value.replace(/\D/g, ''))}
-                            className="w-14 h-8 text-center text-sm font-bold bg-bg-primary rounded-lg border border-bg-tertiary outline-none"
-                            autoFocus
-                          />
-                          <button
-                            onClick={() => setEditValue(String((parseInt(editValue) || 0) + 1))}
-                            className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
-                          >+</button>
-                          <span className="text-xs text-text-secondary ml-1">u</span>
+                          <button onClick={() => setEditValue(String(Math.max(1, (parseInt(editValue) || 0) - 1)))} className="w-7 h-7 rounded bg-bg-tertiary text-xs font-bold active:bg-bg-primary">-</button>
+                          <input type="number" inputMode="numeric" value={editValue} onChange={(e) => setEditValue(e.target.value.replace(/\D/g, ''))} className="w-12 h-7 text-center text-xs font-bold bg-bg-primary rounded border border-bg-tertiary outline-none" autoFocus />
+                          <button onClick={() => setEditValue(String((parseInt(editValue) || 0) + 1))} className="w-7 h-7 rounded bg-bg-tertiary text-xs font-bold active:bg-bg-primary">+</button>
+                          <span className="text-[10px] text-text-secondary ml-0.5">u</span>
                         </div>
                       </div>
-                      {/* Date/time editor for bolus entries */}
                       {event.type === 'bolus' && (
-                        <input
-                          type="datetime-local"
-                          value={editTime}
-                          onChange={(e) => setEditTime(e.target.value)}
-                          className="w-full p-2 rounded-lg bg-bg-primary border border-bg-tertiary text-text-primary text-sm"
-                        />
+                        <div className="flex gap-1 flex-wrap">
+                          {[-60, -45, -30, -15, 0, 15, 30, 45, 60].map((m) => (
+                            <button
+                              key={m}
+                              onClick={() => setEditTimeOffset(m)}
+                              className={`px-1.5 py-1 rounded text-[9px] font-medium ${
+                                editTimeOffset === m
+                                  ? 'bg-accent text-white'
+                                  : 'bg-bg-tertiary text-text-secondary'
+                              }`}
+                            >
+                              {m === 0 ? 'Same' : m < 0 ? `${Math.abs(m)}m \u25C0` : `${m}m \u25B6`}
+                            </button>
+                          ))}
+                        </div>
                       )}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="flex-1 py-2 rounded-lg text-xs font-medium bg-bg-tertiary text-text-secondary"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={() => saveEdit(event)}
-                          className="flex-1 py-2 rounded-lg text-xs font-medium bg-accent text-white"
-                        >
-                          Save
-                        </button>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 rounded text-[10px] font-medium bg-bg-tertiary text-text-secondary">Cancel</button>
+                        <button onClick={() => saveEdit(event)} className="flex-1 py-1.5 rounded text-[10px] font-medium bg-accent text-white">Save</button>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3 px-4 py-2.5">
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${event.type === 'bolus' ? 'bg-accent' : 'bg-glucose'}`} />
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getDotColor(event)}`} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">{event.label}</div>
-                        <div className="text-xs text-text-secondary">{event.detail}</div>
+                        <div className="text-xs font-medium">{event.label}</div>
+                        <div className="text-[10px] text-text-secondary">{event.detail}</div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                          onClick={() => startEdit(event)}
-                          className="px-2 py-1 rounded-md text-xs bg-bg-tertiary text-text-secondary active:bg-bg-primary"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => { setConfirmDeleteId(event.id); setEditingId(null); }}
-                          className="px-2 py-1 rounded-md text-xs bg-danger/20 text-danger active:bg-danger/30"
-                        >
-                          Del
-                        </button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {event.type !== 'exercise' && (
+                          <button onClick={() => startEdit(event)} className="px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-secondary active:bg-bg-primary">Edit</button>
+                        )}
+                        <button onClick={() => { setConfirmDeleteId(event.id); setEditingId(null); }} className="px-1.5 py-0.5 rounded text-[10px] bg-danger/20 text-danger active:bg-danger/30">Del</button>
                       </div>
                     </div>
                   )}
@@ -244,7 +226,7 @@ export default function History({ bolusDoses, basalDoses, onEditBolus, onDeleteB
         ))}
 
         {grouped.length === 0 && (
-          <div className="text-center text-sm text-text-secondary py-4">No entries yet</div>
+          <div className="text-center text-xs text-text-secondary py-3">No entries yet</div>
         )}
       </div>
     </div>

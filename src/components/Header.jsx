@@ -1,19 +1,30 @@
 import { useMemo } from 'react';
 
 const DIRECTION_ARROWS = {
-  DoubleUp: '⇈',
-  SingleUp: '↑',
-  FortyFiveUp: '↗',
-  Flat: '→',
-  FortyFiveDown: '↘',
-  SingleDown: '↓',
-  DoubleDown: '⇊',
+  DoubleUp: '\u21C8',
+  SingleUp: '\u2191',
+  FortyFiveUp: '\u2197',
+  Flat: '\u2192',
+  FortyFiveDown: '\u2198',
+  SingleDown: '\u2193',
+  DoubleDown: '\u21CA',
   'NOT COMPUTABLE': '?',
-  'RATE OUT OF RANGE': '⚠',
+  'RATE OUT OF RANGE': '\u26A0',
   NONE: '',
 };
 
-export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSettings, syncing, lastSyncResult, onSync, settings }) {
+const INTENSITY_COLORS = ['', 'bg-green-500', 'bg-yellow-400', 'bg-red-500'];
+
+function formatTimeSince(ts) {
+  const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const rm = mins % 60;
+  return rm > 0 ? `${hrs}h${rm}m` : `${hrs}h`;
+}
+
+export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSettings, syncing, lastSyncResult, onSync, settings, recentExercise, fatCountdown, highFatTime }) {
   const lastReading = glucoseData.length > 0 ? glucoseData[glucoseData.length - 1] : null;
 
   const bgStatus = useMemo(() => {
@@ -47,7 +58,7 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
   const syncStatus = useMemo(() => {
     if (!lastSyncResult) return null;
     const secsAgo = Math.round((Date.now() - new Date(lastSyncResult.time).getTime()) / 1000);
-    if (secsAgo > 120) return null; // Hide after 2 minutes
+    if (secsAgo > 120) return null;
     if (lastSyncResult.error) {
       const msg = lastSyncResult.error.length > 500 ? lastSyncResult.error.slice(0, 500) + '...' : lastSyncResult.error;
       return { text: `Sync error: ${msg}`, ok: false };
@@ -57,35 +68,26 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
   }, [lastSyncResult]);
 
   return (
-    <div className="px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-1">
-      {/* Top bar: app name + action buttons */}
+    <div className="px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1">
+      {/* Top bar */}
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
-          <h1 className="text-base font-bold tracking-tight opacity-60">Supercharged</h1>
+          <h1 className="text-sm font-bold tracking-tight opacity-60">Supercharged</h1>
           {syncing && (
-            <svg className="h-3.5 w-3.5 text-accent animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="h-3 w-3 text-accent animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onSync}
-            disabled={syncing}
-            className="p-2.5 rounded-lg text-text-secondary hover:text-text-primary disabled:opacity-50 active:opacity-70"
-            aria-label="Sync"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <div className="flex items-center gap-0.5">
+          <button onClick={onSync} disabled={syncing} className="p-2 rounded-lg text-text-secondary active:opacity-70 disabled:opacity-50" aria-label="Sync">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
             </svg>
           </button>
-          <button
-            onClick={onOpenSettings}
-            className="p-2.5 rounded-lg text-text-secondary hover:text-text-primary active:opacity-70"
-            aria-label="Settings"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <button onClick={onOpenSettings} className="p-2 rounded-lg text-text-secondary active:opacity-70" aria-label="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
             </svg>
           </button>
@@ -94,7 +96,7 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
 
       {/* Sync status banner */}
       {syncStatus && (
-        <div className={`text-[10px] mb-2 px-2 py-1 rounded-lg max-h-24 overflow-y-auto break-all ${syncStatus.ok ? 'text-text-secondary' : 'text-danger bg-danger/10'}`}>
+        <div className={`text-[10px] mb-1 px-2 py-0.5 rounded-lg max-h-20 overflow-y-auto break-all ${syncStatus.ok ? 'text-text-secondary' : 'text-danger bg-danger/10'}`}>
           {syncStatus.text}
           {lastSyncResult?.debug && lastSyncResult.debug.length > 0 && (
             <span className="opacity-60"> [{lastSyncResult.debug.join(', ')}]</span>
@@ -102,57 +104,69 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
         </div>
       )}
 
-      {/* Hero: BG + IOB side by side, big and bold */}
-      <div className="flex items-stretch gap-3 mb-2">
-        {/* Blood Glucose — the biggest element */}
-        <div className="flex-1 bg-bg-secondary rounded-2xl p-4 flex flex-col items-center justify-center min-h-[120px]">
-          <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1">Blood Glucose</div>
+      {/* Hero: BG + right column */}
+      <div className="flex items-stretch gap-2 mb-1">
+        {/* Blood Glucose */}
+        <div className="flex-1 bg-bg-secondary rounded-xl p-3 flex flex-col items-center justify-center min-h-[100px]">
+          <div className="text-[9px] uppercase tracking-widest text-text-secondary mb-0.5">Blood Glucose</div>
           <div className="flex items-baseline gap-1">
-            <span className={`text-5xl font-black tabular-nums ${bgStatus.color} ${bgStatus.stale ? 'opacity-50' : ''}`}>
+            <span className={`text-4xl font-black tabular-nums ${bgStatus.color} ${bgStatus.stale ? 'opacity-50' : ''}`}>
               {lastReading ? lastReading.value : '---'}
             </span>
             {trendArrow && (
-              <span className={`text-2xl ${bgStatus.color}`}>{trendArrow}</span>
+              <span className={`text-xl ${bgStatus.color}`}>{trendArrow}</span>
             )}
           </div>
-          <div className="text-xs text-text-secondary mt-1">
-            {minutesAgo ? (
-              <span className={bgStatus.stale ? 'text-danger' : ''}>
-                {bgStatus.stale ? '⚠ ' : ''}{minutesAgo}
-              </span>
-            ) : (
-              <span>No data</span>
-            )}
+          <div className="text-[11px] text-text-secondary mt-0.5">
+            {minutesAgo ? <span>{minutesAgo}</span> : <span>No data</span>}
           </div>
           {lastReading && (
-            <div className={`text-[10px] font-medium mt-0.5 ${bgStatus.color}`}>
-              {bgStatus.label}
-            </div>
+            <div className={`text-[9px] font-medium mt-0.5 ${bgStatus.color}`}>{bgStatus.label}</div>
           )}
         </div>
 
         {/* Right column: IOB + Basal stacked */}
-        <div className="flex flex-col gap-2 w-[120px]">
-          {/* IOB */}
-          <div className="flex-1 bg-bg-secondary rounded-2xl p-3 flex flex-col items-center justify-center">
-            <div className="text-[10px] uppercase tracking-widest text-text-secondary">IOB</div>
-            <div className="text-3xl font-black text-accent tabular-nums">
-              {currentIOB.toFixed(1)}
-            </div>
-            <div className="text-[10px] text-text-secondary">units</div>
+        <div className="flex flex-col gap-1.5 w-[100px]">
+          <div className="flex-1 bg-bg-secondary rounded-xl p-2 flex flex-col items-center justify-center">
+            <div className="text-[9px] uppercase tracking-widest text-text-secondary">IOB</div>
+            <div className="text-2xl font-black text-accent tabular-nums">{currentIOB.toFixed(1)}</div>
+            <div className="text-[9px] text-text-secondary">units</div>
           </div>
-
-          {/* Basal status */}
-          <div className="bg-bg-secondary rounded-2xl p-3 flex flex-col items-center justify-center">
-            <div className="text-[10px] uppercase tracking-widest text-text-secondary">Toujeo</div>
+          <div className="bg-bg-secondary rounded-xl p-2 flex flex-col items-center justify-center">
+            <div className="text-[9px] uppercase tracking-widest text-text-secondary">Toujeo</div>
             {todayBasal ? (
-              <div className="text-lg font-bold text-accent tabular-nums">{todayBasal.units}u</div>
+              <div className="text-base font-bold text-accent tabular-nums">{todayBasal.units}u</div>
             ) : (
-              <div className="text-xs font-medium text-danger mt-0.5">Not logged</div>
+              <div className="text-[10px] font-medium text-danger mt-0.5">Not logged</div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Exercise bars + Fat countdown — compact row */}
+      {(recentExercise?.length > 0 || highFatTime) && (
+        <div className="flex items-center gap-2 px-1 mb-1">
+          {/* Exercise: last 3 workouts as intensity bars */}
+          {recentExercise?.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              {recentExercise.map((ex) => (
+                <div key={ex.id} className="flex flex-col items-center">
+                  <div className={`w-3 h-8 rounded-sm ${INTENSITY_COLORS[ex.intensity] || 'bg-gray-500'}`} />
+                  <div className="text-[8px] text-text-secondary mt-0.5">{formatTimeSince(ex.timestamp)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Fat countdown */}
+          {highFatTime && fatCountdown && (
+            <div className="flex items-center gap-1 ml-auto">
+              <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+              <span className="text-[10px] text-accent font-medium">Fat {fatCountdown}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

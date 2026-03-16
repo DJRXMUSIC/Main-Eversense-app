@@ -11,6 +11,7 @@ import {
   updateBolusDose,
   deleteBasalDose,
   updateBasalDose,
+  getSetting,
   getSettings,
   setSetting,
   cleanupOldData,
@@ -38,6 +39,8 @@ export function useAppData() {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState(null);
   const [toast, setToast] = useState(null);
+  const [exerciseLogs, setExerciseLogs] = useState([]);
+  const [highFatTime, setHighFatTime] = useState(null);
   const iobInterval = useRef(null);
   const syncInterval = useRef(null);
   const hasSynced = useRef(false);
@@ -71,6 +74,20 @@ export function useAppData() {
       applyTheme(s.theme || 'fidelity');
       setSettingsState(s);
       setGlucoseData(glucose);
+
+      // Load exercise logs and high fat timer from settings store
+      const [exLogs, fatTime] = await Promise.all([
+        getSetting('exerciseLogs'),
+        getSetting('highFatTime'),
+      ]);
+      setExerciseLogs(Array.isArray(exLogs) ? exLogs : []);
+      // Only set fat time if it's still within the 8hr window
+      const FAT_DURATION = 8 * 60 * 60 * 1000;
+      if (fatTime && Date.now() - new Date(fatTime).getTime() < FAT_DURATION) {
+        setHighFatTime(fatTime);
+      } else {
+        setHighFatTime(null);
+      }
       setBasalDoses(basal);
       setTodayBasal(todayB);
 
@@ -286,6 +303,54 @@ export function useAppData() {
     }
   }, [loadData, showToast]);
 
+  // Exercise logging — stores as array in settings, keeps last 20
+  const logExercise = useCallback(async (intensity) => {
+    try {
+      const entry = {
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        intensity, // 1=light, 2=moderate, 3=intense
+      };
+      const existing = Array.isArray(exerciseLogs) ? exerciseLogs : [];
+      const updated = [entry, ...existing].slice(0, 20);
+      await setSetting('exerciseLogs', updated);
+      setExerciseLogs(updated);
+    } catch (err) {
+      console.error('Failed to log exercise:', err);
+      showToast('Failed to log exercise');
+    }
+  }, [exerciseLogs, showToast]);
+
+  const removeExercise = useCallback(async (id) => {
+    try {
+      const updated = exerciseLogs.filter(e => e.id !== id);
+      await setSetting('exerciseLogs', updated);
+      setExerciseLogs(updated);
+    } catch (err) {
+      showToast('Failed to delete');
+    }
+  }, [exerciseLogs, showToast]);
+
+  // High fat — resets 8hr countdown from now
+  const logHighFat = useCallback(async () => {
+    try {
+      const now = new Date().toISOString();
+      await setSetting('highFatTime', now);
+      setHighFatTime(now);
+    } catch (err) {
+      showToast('Failed to log high fat');
+    }
+  }, [showToast]);
+
+  const clearHighFat = useCallback(async () => {
+    try {
+      await setSetting('highFatTime', null);
+      setHighFatTime(null);
+    } catch (err) {
+      showToast('Failed to clear');
+    }
+  }, [showToast]);
+
   const doExport = useCallback(async () => {
     const data = await exportAllData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -325,5 +390,11 @@ export function useAppData() {
     doClearAll,
     doSync,
     refreshData: loadData,
+    exerciseLogs,
+    logExercise,
+    removeExercise,
+    highFatTime,
+    logHighFat,
+    clearHighFat,
   };
 }
