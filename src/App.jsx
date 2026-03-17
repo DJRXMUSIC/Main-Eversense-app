@@ -18,6 +18,8 @@ const GlucoseChart = lazyRetry(() => import('./components/GlucoseChart'));
 const BolusModal = lazyRetry(() => import('./components/BolusModal'));
 const BasalModal = lazyRetry(() => import('./components/BasalModal'));
 const ImportModal = lazyRetry(() => import('./components/ImportModal'));
+const ExerciseModal = lazyRetry(() => import('./components/ExerciseModal'));
+const HighFatModal = lazyRetry(() => import('./components/HighFatModal'));
 const Settings = lazyRetry(() => import('./components/Settings'));
 
 class ErrorBoundary extends Component {
@@ -98,6 +100,7 @@ function App() {
     toast,
     exerciseLogs,
     logExercise,
+    editExercise,
     removeExercise,
     highFatTime,
     logHighFat,
@@ -107,6 +110,8 @@ function App() {
   const [showBolus, setShowBolus] = useState(false);
   const [showBasal, setShowBasal] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showExercise, setShowExercise] = useState(null); // null or intensity 1-3
+  const [showHighFat, setShowHighFat] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [dataCounts, setDataCounts] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
@@ -220,9 +225,9 @@ function App() {
 
         {/* Log exercise + insulin resistance buttons */}
         <div className="flex gap-1">
-          <button onClick={() => logExercise(1)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 active:opacity-70 border border-green-500/30">Light</button>
-          <button onClick={() => logExercise(2)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-yellow-400/20 text-yellow-300 active:opacity-70 border border-yellow-400/30">Med</button>
-          <button onClick={() => logExercise(3)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 active:opacity-70 border border-red-500/30">Hard</button>
+          <button onClick={() => setShowExercise(1)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 active:opacity-70 border border-green-500/30">Light</button>
+          <button onClick={() => setShowExercise(2)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-yellow-400/20 text-yellow-300 active:opacity-70 border border-yellow-400/30">Med</button>
+          <button onClick={() => setShowExercise(3)} className="flex-1 py-2 rounded-lg text-[10px] font-bold bg-red-500/20 text-red-400 active:opacity-70 border border-red-500/30">Hard</button>
         </div>
 
         {/* Stacked exercise display — last 3 as full-width bars */}
@@ -238,7 +243,7 @@ function App() {
 
         {/* Insulin Resistance toggle */}
         <button
-          onClick={highFatTime ? clearHighFat : logHighFat}
+          onClick={highFatTime ? clearHighFat : () => setShowHighFat(true)}
           className={`w-full py-2.5 rounded-lg text-xs font-bold active:opacity-70 border ${
             highFatTime
               ? 'bg-accent/20 text-accent border-accent/40'
@@ -268,6 +273,7 @@ function App() {
         onDeleteBolus={removeBolus}
         onEditBasal={editBasal}
         onDeleteBasal={removeBasal}
+        onEditExercise={editExercise}
         onDeleteExercise={removeExercise}
       />
 
@@ -288,6 +294,12 @@ function App() {
         )}
         {showImport && (
           <ImportModal onClose={() => { setShowImport(false); refreshData(); }} onImport={importGlucose} />
+        )}
+        {showExercise && (
+          <ExerciseModal intensity={showExercise} onClose={() => setShowExercise(null)} onSave={logExercise} />
+        )}
+        {showHighFat && (
+          <HighFatModal onClose={() => setShowHighFat(false)} onSave={logHighFat} />
         )}
         {showSettings && (
           <Settings

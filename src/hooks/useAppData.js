@@ -361,11 +361,11 @@ export function useAppData() {
   }, [loadData, showToast]);
 
   // Exercise logging — stores as array in settings, keeps last 20
-  const logExercise = useCallback(async (intensity) => {
+  const logExercise = useCallback(async (intensity, timestamp) => {
     try {
       const entry = {
         id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
+        timestamp: timestamp || new Date().toISOString(),
         intensity, // 1=light, 2=moderate, 3=intense
       };
       const existing = Array.isArray(exerciseLogs) ? exerciseLogs : [];
@@ -376,6 +376,23 @@ export function useAppData() {
     } catch (err) {
       console.error('Failed to log exercise:', err);
       showToast('Failed to log exercise');
+    }
+  }, [exerciseLogs, showToast]);
+
+  const editExercise = useCallback(async (id, updates) => {
+    try {
+      const updated = exerciseLogs.map(e => {
+        if (e.id !== id) return e;
+        const patched = { ...e };
+        if (updates.timestamp) patched.timestamp = updates.timestamp;
+        if (updates.intensity) patched.intensity = updates.intensity;
+        return patched;
+      });
+      await setSetting('exerciseLogs', updated);
+      pushSetting('exerciseLogs', updated);
+      setExerciseLogs(updated);
+    } catch (err) {
+      showToast('Failed to edit exercise');
     }
   }, [exerciseLogs, showToast]);
 
@@ -390,13 +407,13 @@ export function useAppData() {
     }
   }, [exerciseLogs, showToast]);
 
-  // High fat — resets 8hr countdown from now
-  const logHighFat = useCallback(async () => {
+  // High fat — starts countdown from given time (or now)
+  const logHighFat = useCallback(async (timestamp) => {
     try {
-      const now = new Date().toISOString();
-      await setSetting('highFatTime', now);
-      pushSetting('highFatTime', now);
-      setHighFatTime(now);
+      const ts = timestamp || new Date().toISOString();
+      await setSetting('highFatTime', ts);
+      pushSetting('highFatTime', ts);
+      setHighFatTime(ts);
     } catch (err) {
       showToast('Failed to log high fat');
     }
@@ -453,6 +470,7 @@ export function useAppData() {
     refreshData: loadData,
     exerciseLogs,
     logExercise,
+    editExercise,
     removeExercise,
     highFatTime,
     logHighFat,

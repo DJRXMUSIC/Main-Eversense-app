@@ -16,7 +16,7 @@ for (let m = -120; m <= 120; m += 15) {
   else TIME_OFFSETS.push({ label: `${m}m later`, minutes: m });
 }
 
-export default function History({ bolusDoses, basalDoses, exerciseLogs, onEditBolus, onDeleteBolus, onEditBasal, onDeleteBasal, onDeleteExercise }) {
+export default function History({ bolusDoses, basalDoses, exerciseLogs, onEditBolus, onDeleteBolus, onEditBasal, onDeleteBasal, onEditExercise, onDeleteExercise }) {
   const [showAll, setShowAll] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
@@ -103,12 +103,20 @@ export default function History({ bolusDoses, basalDoses, exerciseLogs, onEditBo
 
   const startEdit = (event) => {
     setEditingId(event.id);
-    setEditValue(String(event.units));
+    setEditValue(event.units != null ? String(event.units) : '');
     setEditTimeOffset(0);
     setConfirmDeleteId(null);
   };
 
   const saveEdit = (event) => {
+    if (event.type === 'exercise') {
+      if (editTimeOffset !== 0 && event.timestamp) {
+        const newTime = new Date(new Date(event.timestamp).getTime() + editTimeOffset * 60000);
+        onEditExercise(event.id, { timestamp: newTime.toISOString() });
+      }
+      setEditingId(null);
+      return;
+    }
     const newUnits = parseInt(editValue);
     if (!newUnits || newUnits <= 0) {
       setEditingId(null);
@@ -173,16 +181,25 @@ export default function History({ bolusDoses, basalDoses, exerciseLogs, onEditBo
                     </div>
                   ) : editingId === event.id ? (
                     <div className="px-3 py-2 space-y-1.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 6px)' }}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getDotColor(event)}`} />
-                        <div className="flex items-center gap-1 flex-1">
-                          <button onClick={() => setEditValue(String(Math.max(1, (parseInt(editValue) || 0) - 1)))} className="w-7 h-7 rounded bg-bg-tertiary text-xs font-bold active:bg-bg-primary">-</button>
-                          <input type="number" inputMode="numeric" value={editValue} onChange={(e) => setEditValue(e.target.value.replace(/\D/g, ''))} className="w-12 h-7 text-center text-xs font-bold bg-bg-primary rounded border border-bg-tertiary outline-none" autoFocus />
-                          <button onClick={() => setEditValue(String((parseInt(editValue) || 0) + 1))} className="w-7 h-7 rounded bg-bg-tertiary text-xs font-bold active:bg-bg-primary">+</button>
-                          <span className="text-[10px] text-text-secondary ml-0.5">u</span>
+                      {event.type !== 'exercise' && (
+                        <div className="flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getDotColor(event)}`} />
+                          <div className="flex items-center gap-1 flex-1">
+                            <button onClick={() => setEditValue(String(Math.max(1, (parseInt(editValue) || 0) - 1)))} className="w-7 h-7 rounded bg-bg-tertiary text-xs font-bold active:bg-bg-primary">-</button>
+                            <input type="number" inputMode="numeric" value={editValue} onChange={(e) => setEditValue(e.target.value.replace(/\D/g, ''))} className="w-12 h-7 text-center text-xs font-bold bg-bg-primary rounded border border-bg-tertiary outline-none" autoFocus />
+                            <button onClick={() => setEditValue(String((parseInt(editValue) || 0) + 1))} className="w-7 h-7 rounded bg-bg-tertiary text-xs font-bold active:bg-bg-primary">+</button>
+                            <span className="text-[10px] text-text-secondary ml-0.5">u</span>
+                          </div>
                         </div>
-                      </div>
-                      {event.type === 'bolus' && (
+                      )}
+                      {event.type === 'exercise' && (
+                        <div className="flex items-center gap-2">
+                          <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getDotColor(event)}`} />
+                          <span className="text-xs font-medium">{event.label}</span>
+                          <span className="text-[10px] text-text-secondary">— adjust time</span>
+                        </div>
+                      )}
+                      {(event.type === 'bolus' || event.type === 'exercise') && (
                         <div className="flex gap-1 flex-wrap">
                           {[-60, -45, -30, -15, 0, 15, 30, 45, 60].map((m) => (
                             <button
@@ -212,9 +229,7 @@ export default function History({ bolusDoses, basalDoses, exerciseLogs, onEditBo
                         <div className="text-[10px] text-text-secondary">{event.detail}</div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {event.type !== 'exercise' && (
-                          <button onClick={() => startEdit(event)} className="px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-secondary active:bg-bg-primary">Edit</button>
-                        )}
+                        <button onClick={() => startEdit(event)} className="px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-secondary active:bg-bg-primary">Edit</button>
                         <button onClick={() => { setConfirmDeleteId(event.id); setEditingId(null); }} className="px-1.5 py-0.5 rounded text-[10px] bg-danger/20 text-danger active:bg-danger/30">Del</button>
                       </div>
                     </div>
