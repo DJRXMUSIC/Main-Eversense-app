@@ -133,7 +133,7 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
           )}
 
           {settings.dataSource === 'nightscout-local' && (
-            <div className="mt-2 px-3 py-2 bg-bg-tertiary/50 rounded-lg">
+            <div className="mt-2 px-3 py-2 bg-bg-tertiary/50 rounded-lg space-y-2">
               <div className="text-[10px] text-text-secondary leading-relaxed">
                 Configure ESEL/xDrip+/NSClient to upload to:<br />
                 <span className="text-accent font-mono text-[11px]">
@@ -141,6 +141,44 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
                 </span><br />
                 Use your API key as the <span className="text-accent">api-secret</span> header.
               </div>
+              {nsChecking ? (
+                <div className="text-[10px] text-text-secondary">Testing connection...</div>
+              ) : nsStatus ? (
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${nsStatus.ok ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className="text-[10px] text-text-secondary">
+                    {nsStatus.ok
+                      ? `Connected — ${nsStatus.count} reading${nsStatus.count !== 1 ? 's' : ''} on server`
+                      : nsStatus.error || 'Connection failed'}
+                  </span>
+                </div>
+              ) : null}
+              <button
+                onClick={async () => {
+                  setNsChecking(true);
+                  try {
+                    const apiKey = import.meta.env.VITE_SYNC_API_KEY;
+                    const url = `${window.location.origin}/api/v1/entries/sgv.json?key=${apiKey}&count=288`;
+                    const res = await fetch(url);
+                    if (!res.ok) {
+                      setNsStatus({ ok: false, error: `HTTP ${res.status}${res.status === 401 ? ' — check API key' : ''}` });
+                    } else {
+                      const data = await res.json();
+                      const count = Array.isArray(data) ? data.length : 0;
+                      const latest = count > 0 ? new Date(data[0].dateString || data[0].date).toLocaleTimeString() : null;
+                      setNsStatus({
+                        ok: true,
+                        count: count,
+                        latest,
+                      });
+                    }
+                  } catch (err) {
+                    setNsStatus({ ok: false, error: err.message });
+                  }
+                  setNsChecking(false);
+                }}
+                className="text-[10px] text-accent font-medium active:opacity-80"
+              >Test Connection</button>
             </div>
           )}
 
