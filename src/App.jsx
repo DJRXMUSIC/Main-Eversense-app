@@ -114,7 +114,7 @@ function App() {
   const [showHighFat, setShowHighFat] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [dataCounts, setDataCounts] = useState(null);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null); // 'ios' | BeforeInstallPromptEvent | null
   const [, setTick] = useState(0);
 
   // Tick every 30s to update time-since displays
@@ -123,14 +123,44 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
+  // PWA install prompt
   useEffect(() => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
       || window.navigator.standalone === true;
-    if (!isStandalone) {
-      const timer = setTimeout(() => setShowInstallPrompt(true), 3000);
-      return () => clearTimeout(timer);
+    if (isStandalone) return;
+
+    // Listen for the native beforeinstallprompt (Chrome, Edge, Samsung, etc.)
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+
+    // iOS Safari fallback — no beforeinstallprompt support
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    if (isIOS && isSafari) {
+      const timer = setTimeout(() => setInstallPrompt('ios'), 2000);
+      return () => { clearTimeout(timer); window.removeEventListener('beforeinstallprompt', handler); };
     }
+
+    // For non-iOS browsers, show after a short delay if beforeinstallprompt hasn't fired
+    const fallbackTimer = setTimeout(() => {
+      setInstallPrompt((prev) => prev || 'generic');
+    }, 4000);
+
+    return () => { clearTimeout(fallbackTimer); window.removeEventListener('beforeinstallprompt', handler); };
   }, []);
+
+  const handleInstall = async () => {
+    if (installPrompt && typeof installPrompt === 'object' && installPrompt.prompt) {
+      installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+      if (result.outcome === 'accepted') {
+        setInstallPrompt(null);
+      }
+    }
+  };
 
   useEffect(() => {
     if (showSettings) {
@@ -166,12 +196,38 @@ function App() {
 
   return (
     <div className="min-h-screen bg-bg-primary max-w-lg mx-auto relative" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-      {showInstallPrompt && (
-        <div className="bg-bg-secondary mx-3 mt-1 p-2 rounded-xl flex items-center gap-2">
-          <div className="flex-1 text-xs text-text-secondary">
-            Install: tap Share then "Add to Home Screen"
-          </div>
-          <button onClick={() => setShowInstallPrompt(false)} className="text-text-secondary text-lg">&times;</button>
+      {installPrompt && (
+        <div className="bg-bg-secondary mx-3 mt-1 p-2.5 rounded-xl flex items-center gap-2">
+          {typeof installPrompt === 'object' && installPrompt.prompt ? (
+            <>
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-text-primary">Install App</div>
+                <div className="text-[10px] text-text-secondary">Add to home screen for the full experience</div>
+              </div>
+              <button onClick={handleInstall} className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-accent text-white active:opacity-80">Install</button>
+              <button onClick={() => setInstallPrompt(null)} className="text-text-secondary text-lg leading-none ml-0.5">&times;</button>
+            </>
+          ) : installPrompt === 'ios' ? (
+            <>
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-text-primary">Install App</div>
+                <div className="text-[10px] text-text-secondary">
+                  Tap <span className="inline-block align-middle text-accent">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="inline"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                  </span> Share then <strong>"Add to Home Screen"</strong>
+                </div>
+              </div>
+              <button onClick={() => setInstallPrompt(null)} className="text-text-secondary text-lg leading-none">&times;</button>
+            </>
+          ) : (
+            <>
+              <div className="flex-1">
+                <div className="text-xs font-semibold text-text-primary">Install App</div>
+                <div className="text-[10px] text-text-secondary">Use your browser menu to "Add to Home Screen"</div>
+              </div>
+              <button onClick={() => setInstallPrompt(null)} className="text-text-secondary text-lg leading-none">&times;</button>
+            </>
+          )}
         </div>
       )}
 
