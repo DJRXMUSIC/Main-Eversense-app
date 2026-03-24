@@ -121,6 +121,7 @@ export function useAppData() {
       pushWidgetData({ iob, glucoseData: glucose, todayBasal: todayB });
     } catch (err) {
       console.error('Failed to load data:', err);
+      showToast(`Load error: ${err.message}`);
       setLoading(false);
     } finally {
       loadingRef.current = false;

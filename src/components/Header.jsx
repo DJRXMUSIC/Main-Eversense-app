@@ -87,7 +87,7 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
       {/* Sync status banner */}
       {syncStatus && (
         <div className={`text-[10px] mb-1 px-2 py-0.5 rounded-lg max-h-20 overflow-y-auto break-all ${syncStatus.ok ? 'text-text-secondary' : 'text-danger bg-danger/10'}`}>
-          {syncStatus.text}
+          {syncStatus.text} · {glucoseData.length} in view
           {lastSyncResult?.debug && lastSyncResult.debug.length > 0 && (
             <span className="opacity-60"> [{lastSyncResult.debug.join(', ')}]</span>
           )}
