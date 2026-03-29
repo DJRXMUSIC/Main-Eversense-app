@@ -84,15 +84,17 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
         </div>
       </div>
 
-      {/* Sync status banner */}
-      {syncStatus && (
-        <div className={`text-[10px] mb-1 px-2 py-0.5 rounded-lg max-h-20 overflow-y-auto break-all ${syncStatus.ok ? 'text-text-secondary' : 'text-danger bg-danger/10'}`}>
-          {syncStatus.text} · {glucoseData.length} in view
-          {lastSyncResult?.debug && lastSyncResult.debug.length > 0 && (
-            <span className="opacity-60"> [{lastSyncResult.debug.join(', ')}]</span>
-          )}
-        </div>
-      )}
+      {/* Sync status banner — fixed height to prevent layout shift */}
+      <div className="h-5 mb-1">
+        {syncStatus && (
+          <div className={`text-[10px] px-2 py-0.5 rounded-lg truncate ${syncStatus.ok ? 'text-text-secondary' : 'text-danger bg-danger/10'}`}>
+            {syncStatus.text} · {glucoseData.length} in view
+            {lastSyncResult?.debug && lastSyncResult.debug.length > 0 && (
+              <span className="opacity-60"> [{lastSyncResult.debug.join(', ')}]</span>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Hero: BG + right column */}
       <div className="flex items-stretch gap-2 mb-1">
