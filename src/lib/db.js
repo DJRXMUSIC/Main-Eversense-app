@@ -42,15 +42,32 @@ function resetDB() {
   dbPromise = null;
 }
 
+// Proactively reset DB on app resume — iOS kills IndexedDB connections
+// after the PWA is suspended for minutes/hours. Resetting before any
+// operation avoids the first-access failure entirely.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      resetDB();
+    }
+  });
+}
+
 // Wrap a DB operation with automatic retry on connection failure.
-// If the first attempt fails, reset the connection and try once more.
+// Retries up to 3 times with short delays — iOS may need a moment
+// to make IndexedDB available again after a long suspend.
 async function withRetry(fn) {
-  try {
-    return await fn();
-  } catch (err) {
-    console.warn('DB operation failed, reconnecting:', err.message);
-    resetDB();
-    return await fn();
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === MAX_RETRIES) throw err;
+      console.warn(`DB operation failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), reconnecting:`, err.message);
+      resetDB();
+      // Brief delay to let iOS restore IndexedDB availability
+      await new Promise(r => setTimeout(r, 150 * (attempt + 1)));
+    }
   }
 }
 

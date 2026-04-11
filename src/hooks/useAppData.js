@@ -56,6 +56,7 @@ export function useAppData() {
   const hasSynced = useRef(false);
   const syncingRef = useRef(false);
   const loadingRef = useRef(false);
+  const pendingReload = useRef(false);
 
   // Show a brief toast message (auto-dismisses after 3s)
   const showToast = useCallback((message, type = 'error') => {
@@ -64,8 +65,11 @@ export function useAppData() {
   }, []);
 
   const loadData = useCallback(async () => {
-    // Prevent concurrent loads from racing
-    if (loadingRef.current) return;
+    // If a load is already running, queue a reload for when it finishes
+    if (loadingRef.current) {
+      pendingReload.current = true;
+      return;
+    }
     loadingRef.current = true;
     try {
       const today = localDate();
@@ -121,11 +125,17 @@ export function useAppData() {
       pushWidgetData({ iob, glucoseData: glucose, todayBasal: todayB });
     } catch (err) {
       console.error('Failed to load data:', err);
+      showToast(`Load error: ${err.message}`);
       setLoading(false);
     } finally {
       loadingRef.current = false;
+      // If another load was requested while we were busy, run it now
+      if (pendingReload.current) {
+        pendingReload.current = false;
+        loadData();
+      }
     }
-  }, []);
+  }, [showToast]);
 
   // Sync using the configured data source
   const doSync = useCallback(async () => {
@@ -140,6 +150,14 @@ export function useAppData() {
       );
       setLastSyncResult({ time: new Date(), ...result });
       await loadData();
+      // Safety net: if readings were imported, force-refresh glucose state
+      // in case loadData was queued/deferred by the race-condition guard
+      if (result.imported > 0) {
+        const now = new Date();
+        const windowStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+        const freshGlucose = await getGlucoseReadings(windowStart.toISOString(), now.toISOString());
+        setGlucoseData(freshGlucose);
+      }
     } catch (err) {
       console.error('Sync failed:', err);
       setLastSyncResult({ time: new Date(), error: err.message, imported: 0 });

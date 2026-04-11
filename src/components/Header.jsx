@@ -59,18 +59,24 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
 
   return (
     <div className="px-3 pt-[max(0.5rem,env(safe-area-inset-top))] pb-1">
-      {/* Top bar */}
+      {/* Top bar — sync status replaces title text to avoid layout shift */}
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-2">
-          <h1 className="text-sm font-bold tracking-tight opacity-60">Supercharged</h1>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {syncStatus ? (
+            <div className={`text-[10px] truncate ${syncStatus.ok ? 'text-text-secondary' : 'text-danger'}`}>
+              {syncStatus.text}
+            </div>
+          ) : (
+            <h1 className="text-sm font-bold tracking-tight opacity-60">Supercharged</h1>
+          )}
           {syncing && (
-            <svg className="h-3 w-3 text-accent animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <svg className="h-3 w-3 text-accent animate-spin flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           )}
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button onClick={onSync} disabled={syncing} className="p-2 rounded-lg text-text-secondary active:opacity-70 disabled:opacity-50" aria-label="Sync">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
@@ -83,16 +89,6 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
           </button>
         </div>
       </div>
-
-      {/* Sync status banner */}
-      {syncStatus && (
-        <div className={`text-[10px] mb-1 px-2 py-0.5 rounded-lg max-h-20 overflow-y-auto break-all ${syncStatus.ok ? 'text-text-secondary' : 'text-danger bg-danger/10'}`}>
-          {syncStatus.text}
-          {lastSyncResult?.debug && lastSyncResult.debug.length > 0 && (
-            <span className="opacity-60"> [{lastSyncResult.debug.join(', ')}]</span>
-          )}
-        </div>
-      )}
 
       {/* Hero: BG + right column */}
       <div className="flex items-stretch gap-2 mb-1">
