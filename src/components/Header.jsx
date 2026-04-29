@@ -53,8 +53,9 @@ export default function Header({ currentIOB, todayBasal, glucoseData, onOpenSett
       const msg = lastSyncResult.error.length > 500 ? lastSyncResult.error.slice(0, 500) + '...' : lastSyncResult.error;
       return { text: `Sync error: ${msg}`, ok: false };
     }
-    if (lastSyncResult.imported > 0) return { text: `+${lastSyncResult.imported} new readings`, ok: true };
-    return { text: 'Synced — no new data', ok: true };
+    const stored = lastSyncResult.totalStored != null ? ` • ${lastSyncResult.totalStored} stored` : '';
+    if (lastSyncResult.imported > 0) return { text: `+${lastSyncResult.imported} new${stored}`, ok: true };
+    return { text: `Synced${stored}`, ok: true };
   }, [lastSyncResult]);
 
   return (

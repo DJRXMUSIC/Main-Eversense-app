@@ -7,6 +7,39 @@
  *   - xDrip+ local web service (port 17580)
  */
 
+/**
+ * Detect if a direct fetch would be blocked by mixed-content policy
+ * (HTTPS page fetching HTTP resource).
+ */
+function needsProxy(targetUrl) {
+  try {
+    const target = new URL(targetUrl);
+    return (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      target.protocol === 'http:'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch via the server-side proxy to bypass mixed-content blocks.
+ */
+async function fetchViaProxy(targetUrl, headers = {}) {
+  const apiKey = import.meta.env.VITE_SYNC_API_KEY;
+  const proxyUrl = new URL('/api/bg/proxy', window.location.origin);
+  proxyUrl.searchParams.set('url', targetUrl);
+  if (apiKey) proxyUrl.searchParams.set('key', apiKey);
+
+  const response = await fetch(proxyUrl.toString(), { headers });
+  if (!response.ok) {
+    throw new Error(`Proxy fetch failed: ${response.status}`);
+  }
+  return response;
+}
+
 const DIRECTION_MAP = {
   DoubleUp: 2,
   SingleUp: 1,
@@ -68,7 +101,10 @@ export async function fetchNightscoutReadings(baseUrl, hours = 6, apiSecret = nu
   }
 
   try {
-    const response = await fetch(url.toString(), { headers });
+    const fetchUrl = url.toString();
+    const response = needsProxy(fetchUrl)
+      ? await fetchViaProxy(fetchUrl, headers)
+      : await fetch(fetchUrl, { headers });
     if (!response.ok) {
       throw new Error(`Nightscout fetch failed: ${response.status}`);
     }
@@ -79,7 +115,6 @@ export async function fetchNightscoutReadings(baseUrl, hours = 6, apiSecret = nu
     return entries
       .filter(e => {
         if (xdrip) {
-          // xDrip+ returns entries with Timestamp (ms) and calculated_value or sgv
           return (e.sgv || e.calculated_value || e.glucose) && (e.Timestamp || e.date || e.dateString);
         }
         return (e.sgv || e.glucose) && (e.date || e.dateString);
@@ -159,7 +194,10 @@ export async function checkNightscoutStatus(baseUrl) {
     url.searchParams.set('count', '1');
 
     try {
-      const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10000) });
+      const fetchUrl = url.toString();
+      const response = needsProxy(fetchUrl)
+        ? await fetchViaProxy(fetchUrl)
+        : await fetch(fetchUrl, { signal: AbortSignal.timeout(10000) });
       if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
 
       const data = await response.json();
