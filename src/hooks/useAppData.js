@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  getGlucoseReadings,
+  getAllGlucoseReadings,
   getAllBolusDoses,
   getBasalDoses,
   getBasalDoseForDate,
@@ -74,12 +74,11 @@ export function useAppData() {
     try {
       const today = localDate();
       const now = new Date();
-      const windowStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
 
       // Parallel DB reads — all independent, no reason to wait sequentially
       const [s, glucose, rawBolus, basal, todayB] = await Promise.all([
         getSettings(),
-        getGlucoseReadings(windowStart.toISOString(), now.toISOString()),
+        getAllGlucoseReadings(),
         getAllBolusDoses(),
         getBasalDoses(7),
         getBasalDoseForDate(today),
@@ -148,16 +147,14 @@ export function useAppData() {
         settings.dataSource || 'health-export',
         settings.nightscoutUrl || null
       );
-      setLastSyncResult({ time: new Date(), ...result });
       await loadData();
-      // Safety net: if readings were imported, force-refresh glucose state
-      // in case loadData was queued/deferred by the race-condition guard
-      if (result.imported > 0) {
-        const now = new Date();
-        const windowStart = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-        const freshGlucose = await getGlucoseReadings(windowStart.toISOString(), now.toISOString());
-        setGlucoseData(freshGlucose);
-      }
+      const freshGlucose = await getAllGlucoseReadings();
+      setGlucoseData(freshGlucose);
+      setLastSyncResult({
+        time: new Date(),
+        ...result,
+        totalStored: freshGlucose.length,
+      });
     } catch (err) {
       console.error('Sync failed:', err);
       setLastSyncResult({ time: new Date(), error: err.message, imported: 0 });
