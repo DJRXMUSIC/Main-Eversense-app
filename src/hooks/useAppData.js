@@ -86,6 +86,7 @@ export function useAppData() {
 
       applyTheme(s.theme || 'fidelity');
       setSettingsState(s);
+      glucose.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       setGlucoseData(glucose);
 
       // Load exercise logs and high fat timer from settings store
@@ -149,6 +150,7 @@ export function useAppData() {
       );
       await loadData();
       const freshGlucose = await getAllGlucoseReadings();
+      freshGlucose.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
       setGlucoseData(freshGlucose);
       setLastSyncResult({
         time: new Date(),
