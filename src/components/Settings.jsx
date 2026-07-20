@@ -247,6 +247,13 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
               unit="minutes"
               displayTransform={(v) => `${v} min`}
             />
+            <SettingRow
+              label="Insulin Degradation Delay"
+              settingKey="insulinDegradationDelay"
+              min={0} max={60} step={5}
+              unit="minutes"
+              displayTransform={(v) => `${v} min`}
+            />
           </div>
         </div>
 

@@ -232,6 +232,7 @@ export function getBasalDoseForDate(date) {
 const DEFAULT_SETTINGS = {
   bolusDIA: 240,
   bolusPeakTime: 60,
+  insulinDegradationDelay: 15,
   targetRangeLow: 70,
   targetRangeHigh: 160,
   graphDisplayLow: 50,

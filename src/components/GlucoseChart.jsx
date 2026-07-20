@@ -63,24 +63,26 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
     if (activeDoses.length === 0) return [];
     const ws = new Date(windowStart);
     const we = new Date(windowEnd);
-    return getAggregatedIOBCurve(activeDoses, ws, we, 5)
+    const delay = settings?.insulinDegradationDelay ?? 15;
+    return getAggregatedIOBCurve(activeDoses, ws, we, 5, delay)
       .map(p => ({ x: p.time.getTime(), y: p.iob }));
-  }, [activeDoses, windowStart, windowEnd]);
+  }, [activeDoses, windowStart, windowEnd, settings]);
 
   // Per-bolus activity curves — bell-shaped: onset → peak → decline for each dose
   const perDoseActivityCurves = useMemo(() => {
     if (activeDoses.length === 0) return [];
     const ws = new Date(windowStart);
     const we = new Date(windowEnd);
+    const delay = settings?.insulinDegradationDelay ?? 15;
     return activeDoses.map(dose => {
-      const points = getDoseActivityCurve(dose, ws, we, 3);
+      const points = getDoseActivityCurve(dose, ws, we, 3, delay);
       return {
         id: dose.id,
         units: dose.units,
         data: points.map(p => ({ x: p.time.getTime(), y: p.activity })),
       };
     }).filter(c => c.data.length > 0);
-  }, [activeDoses, windowStart, windowEnd]);
+  }, [activeDoses, windowStart, windowEnd, settings]);
 
   const maxIOB = useMemo(() => {
     const max = aggregatedIOB.reduce((m, p) => Math.max(m, p.y), 0);
@@ -185,14 +187,14 @@ function GlucoseChart({ glucoseData, bolusDoses, settings, themeId }) {
       if (dist < minDist) { minDist = dist; nearestBG = p; }
     }
     const bgValue = (nearestBG && minDist < 15 * 60 * 1000) ? nearestBG.y : null;
-    const iobAtTime = calcTotalIOB(bolusDoses, new Date(timeAtX));
+    const iobAtTime = calcTotalIOB(bolusDoses, new Date(timeAtX), settings?.insulinDegradationDelay ?? 15);
 
     const timeStr = new Date(timeAtX).toLocaleTimeString('en-US', {
       hour: 'numeric', minute: '2-digit', hour12: true,
     });
 
     setCrosshair({ pixelX: x, time: timeAtX, timeStr, bg: bgValue, iob: iobAtTime });
-  }, [glucosePoints, bolusDoses]);
+  }, [glucosePoints, bolusDoses, settings]);
 
   const options = useMemo(() => ({
     responsive: true,
