@@ -112,7 +112,7 @@ export function useAppData() {
       });
       setBolusDoses(allBolus);
 
-      const iob = calcTotalIOB(allBolus, now);
+      const iob = calcTotalIOB(allBolus, now, s?.insulinDegradationDelay ?? 15);
       setCurrentIOB(iob);
 
       setLoading(false);
@@ -250,18 +250,19 @@ export function useAppData() {
   useEffect(() => {
     iobInterval.current = setInterval(() => {
       if (bolusDoses.length > 0) {
-        const diaMs = HUMALOG_DIA * 60 * 1000;
+        const delay = settings?.insulinDegradationDelay ?? 15;
+        const diaMs = (HUMALOG_DIA + delay) * 60 * 1000;
         const now = new Date();
         const recentDoses = bolusDoses.filter(d =>
           now.getTime() - new Date(d.timestamp).getTime() < diaMs
         );
-        const iob = calcTotalIOB(recentDoses, now);
+        const iob = calcTotalIOB(recentDoses, now, delay);
         setCurrentIOB(iob);
       }
     }, 60000);
 
     return () => clearInterval(iobInterval.current);
-  }, [bolusDoses]);
+  }, [bolusDoses, settings]);
 
   // Apply theme when setting changes
   const updateSetting = useCallback(async (key, value) => {

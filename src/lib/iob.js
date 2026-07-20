@@ -90,21 +90,28 @@ export function iobFraction(t) {
 
 /**
  * IOB (in units) for a single dose at a given time.
+ *
+ * `delayMinutes` holds IOB flat at the full dose for the first `delayMinutes`
+ * after injection, then the activity curve applies (time-shifted). This models
+ * the lag before insulin begins acting. Because iobFraction(t) === 1 for t <= 0,
+ * subtracting the delay keeps IOB at full units during the hold window.
  */
-export function calcDoseIOB(dose, atTime) {
+export function calcDoseIOB(dose, atTime, delayMinutes = 0) {
   const doseTime = new Date(dose.timestamp);
   const minutesElapsed = (atTime.getTime() - doseTime.getTime()) / (1000 * 60);
-  if (minutesElapsed < 0 || minutesElapsed >= DIA) return 0;
-  return dose.units * iobFraction(minutesElapsed);
+  if (minutesElapsed < 0) return 0;
+  const t = minutesElapsed - delayMinutes; // hold flat while t <= 0
+  if (t >= DIA) return 0;                   // active window is delay + DIA
+  return dose.units * iobFraction(t);
 }
 
 /**
  * Total IOB across all doses at a given time.
  */
-export function calcTotalIOB(doses, atTime) {
+export function calcTotalIOB(doses, atTime, delayMinutes = 0) {
   let total = 0;
   for (const dose of doses) {
-    total += calcDoseIOB(dose, atTime);
+    total += calcDoseIOB(dose, atTime, delayMinutes);
   }
   return total;
 }
@@ -112,11 +119,11 @@ export function calcTotalIOB(doses, atTime) {
 /**
  * IOB curve for a single dose over a time window (for per-bolus chart lines).
  */
-export function getDoseIOBCurve(dose, startTime, endTime, intervalMinutes = 5) {
+export function getDoseIOBCurve(dose, startTime, endTime, intervalMinutes = 5, delayMinutes = 0) {
   const points = [];
   const current = new Date(startTime);
   while (current <= endTime) {
-    const iob = calcDoseIOB(dose, current);
+    const iob = calcDoseIOB(dose, current, delayMinutes);
     if (iob > 0.01) {
       points.push({ time: new Date(current), iob });
     }
@@ -130,13 +137,13 @@ export function getDoseIOBCurve(dose, startTime, endTime, intervalMinutes = 5) {
  * Scaled so peak = dose.units (e.g. a 5u dose peaks at 5.0 on the y-axis).
  * This shows the onset → peak → decline profile for chart visualization.
  */
-export function getDoseActivityCurve(dose, startTime, endTime, intervalMinutes = 3) {
+export function getDoseActivityCurve(dose, startTime, endTime, intervalMinutes = 3, delayMinutes = 0) {
   const points = [];
   const doseTime = new Date(dose.timestamp).getTime();
   const current = new Date(startTime);
   while (current <= endTime) {
     const minutesElapsed = (current.getTime() - doseTime) / (1000 * 60);
-    const activity = rawActivity(minutesElapsed);
+    const activity = rawActivity(minutesElapsed - delayMinutes);
     if (activity > 0.005) {
       points.push({ time: new Date(current), activity: activity * dose.units });
     }
@@ -148,11 +155,11 @@ export function getDoseActivityCurve(dose, startTime, endTime, intervalMinutes =
 /**
  * Aggregated IOB curve (sum of all doses) over a time window.
  */
-export function getAggregatedIOBCurve(doses, startTime, endTime, intervalMinutes = 5) {
+export function getAggregatedIOBCurve(doses, startTime, endTime, intervalMinutes = 5, delayMinutes = 0) {
   const points = [];
   const current = new Date(startTime);
   while (current <= endTime) {
-    const iob = calcTotalIOB(doses, current);
+    const iob = calcTotalIOB(doses, current, delayMinutes);
     points.push({ time: new Date(current), iob });
     current.setMinutes(current.getMinutes() + intervalMinutes);
   }
