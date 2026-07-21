@@ -18,36 +18,68 @@ const APP_ICONS = [
   { id: 'teal', name: 'Teal', color: '#14b8a6' },
 ];
 
+// Editable numeric setting: type a value directly, or use the -/+ steppers.
+// Values are clamped to [min, max] only on commit (blur / Enter / stepper press),
+// never while typing, so intermediate keystrokes are not "corrected" mid-entry.
+function SettingRow({ label, value, min, max, step = 1, unit, displayTransform, onCommit }) {
+  const [draft, setDraft] = useState(null); // string while editing, null when idle
+  const numValue = Number.isFinite(value) ? value : (parseInt(value, 10) || 0);
+  const editing = draft !== null;
+  const clamp = (n) => Math.max(min, Math.min(max, n));
+
+  const stepBy = (delta) => {
+    const base = editing ? (parseInt(draft, 10) || numValue) : numValue;
+    setDraft(null);
+    onCommit(clamp(base + delta));
+  };
+
+  const commit = () => {
+    if (draft === null) return;
+    const parsed = parseInt(draft, 10);
+    onCommit(Number.isNaN(parsed) ? numValue : clamp(parsed));
+    setDraft(null);
+  };
+
+  const shown = editing
+    ? draft
+    : (displayTransform ? displayTransform(numValue) : String(numValue));
+
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-bg-tertiary last:border-b-0">
+      <div>
+        <div className="text-sm font-medium">{label}</div>
+        {unit && <div className="text-xs text-text-secondary">{unit}</div>}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => stepBy(-step)}
+          className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
+        >-</button>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={shown}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => setDraft(e.target.value.replace(/\D/g, ''))}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          className="w-16 text-center font-medium tabular-nums text-sm bg-bg-primary rounded-lg border border-bg-tertiary outline-none focus:border-accent py-1"
+        />
+        <button
+          onClick={() => stepBy(step)}
+          className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
+        >+</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings({ settings, onUpdateSetting, onExport, onClearAll, onClose, dataCounts }) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [nsUrlInput, setNsUrlInput] = useState(settings.nightscoutUrl || '');
   const [nsStatus, setNsStatus] = useState(null);
   const [nsChecking, setNsChecking] = useState(false);
-
-  const SettingRow = ({ label, settingKey, min, max, step = 1, unit, displayTransform }) => {
-    const value = settings[settingKey];
-    const displayValue = displayTransform ? displayTransform(value) : value;
-
-    return (
-      <div className="flex items-center justify-between py-3 border-b border-bg-tertiary last:border-b-0">
-        <div>
-          <div className="text-sm font-medium">{label}</div>
-          {unit && <div className="text-xs text-text-secondary">{unit}</div>}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onUpdateSetting(settingKey, Math.max(min, value - step))}
-            className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
-          >-</button>
-          <span className="w-16 text-center font-medium tabular-nums text-sm">{displayValue}</span>
-          <button
-            onClick={() => onUpdateSetting(settingKey, Math.min(max, value + step))}
-            className="w-8 h-8 rounded-lg bg-bg-tertiary text-sm font-bold active:bg-bg-primary"
-          >+</button>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="fixed inset-0 z-50 bg-bg-primary overflow-y-auto">
@@ -235,21 +267,24 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
           <div className="bg-bg-secondary rounded-xl px-4">
             <SettingRow
               label="Duration of Insulin Action"
-              settingKey="bolusDIA"
+              value={settings.bolusDIA}
+              onCommit={(v) => onUpdateSetting('bolusDIA', v)}
               min={180} max={420} step={15}
               unit="minutes"
               displayTransform={(v) => `${(v / 60).toFixed(1)} hrs`}
             />
             <SettingRow
               label="Peak Activity Time"
-              settingKey="bolusPeakTime"
+              value={settings.bolusPeakTime}
+              onCommit={(v) => onUpdateSetting('bolusPeakTime', v)}
               min={45} max={90} step={5}
               unit="minutes"
               displayTransform={(v) => `${v} min`}
             />
             <SettingRow
               label="Insulin Degradation Delay"
-              settingKey="insulinDegradationDelay"
+              value={settings.insulinDegradationDelay}
+              onCommit={(v) => onUpdateSetting('insulinDegradationDelay', v)}
               min={0} max={60} step={5}
               unit="minutes"
               displayTransform={(v) => `${v} min`}
@@ -263,7 +298,8 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
           <div className="bg-bg-secondary rounded-xl px-4">
             <SettingRow
               label="Default Daily Units"
-              settingKey="defaultBasalUnits"
+              value={settings.defaultBasalUnits}
+              onCommit={(v) => onUpdateSetting('defaultBasalUnits', v)}
               min={1} max={100} step={1}
               displayTransform={(v) => `${v}u`}
             />
@@ -274,8 +310,8 @@ export default function Settings({ settings, onUpdateSetting, onExport, onClearA
         <div className="mb-6">
           <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Display</h3>
           <div className="bg-bg-secondary rounded-xl px-4">
-            <SettingRow label="Target Range Low" settingKey="targetRangeLow" min={50} max={100} displayTransform={(v) => `${v} mg/dL`} />
-            <SettingRow label="Target Range High" settingKey="targetRangeHigh" min={120} max={250} displayTransform={(v) => `${v} mg/dL`} />
+            <SettingRow label="Target Range Low" value={settings.targetRangeLow} onCommit={(v) => onUpdateSetting('targetRangeLow', v)} min={50} max={100} displayTransform={(v) => `${v} mg/dL`} />
+            <SettingRow label="Target Range High" value={settings.targetRangeHigh} onCommit={(v) => onUpdateSetting('targetRangeHigh', v)} min={120} max={250} displayTransform={(v) => `${v} mg/dL`} />
           </div>
         </div>
 
